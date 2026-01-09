@@ -1,4 +1,4 @@
-import '../src/utils/polyfill'
+import '../../src/utils/polyfill'
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   View,
@@ -9,14 +9,14 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
-  SafeAreaView,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { initDatabase } from '../src/db/init'
-import { db } from '../src/db/client'
-import { OR } from '../src/db/schema'
-import { syncService } from '../src/services/SyncService'
-import { electricSync } from '../src/services/ShapeStream'
+import { initDatabase } from '../../src/db/init'
+import { db } from '../../src/db/client'
+import { OR } from '../../src/db/schema'
+import { syncService } from '../../src/services/SyncService'
+import { electricSync } from '../../src/services/ShapeStream'
 import { desc } from 'drizzle-orm'
 import RandomUUID from 'react-native-random-uuid'
 
@@ -79,7 +79,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
       <View style={styles.header}>
@@ -134,7 +134,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     padding: 24,

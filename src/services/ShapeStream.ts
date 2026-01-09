@@ -20,7 +20,7 @@ export class ElectricSync {
         try {
             // 1. Define the stream for the 'OR' table
             this.stream = new ShapeStream({
-                url: `${BASE_URL}?table=OR&source_id=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID}&secret=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_SECRET}`,
+                url: `${BASE_URL}?table=%22OR%22&source_id=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID}&secret=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_SECRET}`,
             })
 
             // 2. Consume the stream

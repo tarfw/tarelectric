@@ -1,15 +1,15 @@
 import { open } from '@op-engineering/op-sqlite'
 
 const db = open({
-    name: 'myDb.sqlite',
+  name: 'myDb.sqlite',
 })
 
 export async function initDatabase() {
-    console.log('Initializing Database...')
-    try {
-        // OR Table
-        await db.execute(`
-      CREATE TABLE IF NOT EXISTS OR (
+  console.log('Initializing Database...')
+  try {
+    // OR Table
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS "OR" (
         id TEXT PRIMARY KEY,
         streamId TEXT NOT NULL,
         opcode INTEGER NOT NULL,
@@ -21,8 +21,8 @@ export async function initDatabase() {
       );
     `)
 
-        // Collab Table
-        await db.execute(`
+    // Collab Table
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS Collab (
         userId TEXT NOT NULL,
         streamId TEXT NOT NULL,
@@ -32,11 +32,11 @@ export async function initDatabase() {
       );
     `)
 
-        // MutationQueue Table
-        await db.execute(`
+    // MutationQueue Table
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS MutationQueue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table TEXT NOT NULL,
+        "table" TEXT NOT NULL,
         op TEXT NOT NULL,
         data TEXT NOT NULL, -- JSON
         synced INTEGER NOT NULL DEFAULT 0, -- boolean 0/1
@@ -44,8 +44,8 @@ export async function initDatabase() {
       );
     `)
 
-        console.log('Database initialized successfully')
-    } catch (e) {
-        console.error('Failed to init database', e)
-    }
+    console.log('Database initialized successfully')
+  } catch (e) {
+    console.error('Failed to init database', e)
+  }
 }
