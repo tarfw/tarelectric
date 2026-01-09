@@ -8,6 +8,20 @@
       "when": 1750269011095,
       "tag": "0000_lush_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1767978033057,
+      "tag": "0001_mixed_jamie_braddock",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767978169730,
+      "tag": "0002_easy_quasimodo",
+      "breakpoints": true
     }
   ]
 }

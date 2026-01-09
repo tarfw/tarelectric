@@ -1,5 +1,5 @@
-import '../src/utils/polyfill' // Load polyfill first
-import React, { useState } from 'react'
+import '../src/utils/polyfill'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -9,144 +9,100 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
+  SafeAreaView,
 } from 'react-native'
-import { useLiveQuery } from '@tanstack/react-db'
 import { StatusBar } from 'expo-status-bar'
-import { supabase } from '../src/utils/supabase'
-import { selectTodoSchema } from '../src/db/schema'
-import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { createCollection } from '@tanstack/react-db'
-import { parseISO } from 'date-fns'
+import { initDatabase } from '../src/db/init'
+import { db } from '../src/db/client'
+import { OR } from '../src/db/schema'
+import { syncService } from '../src/services/SyncService'
+import { desc } from 'drizzle-orm'
+import RandomUUID from 'react-native-random-uuid'
 
-// --- Configuration ---
-
-// Config for ElectricSQL Sync
-const todoCollection = createCollection(
-  electricCollectionOptions({
-    id: `todos`,
-    schema: selectTodoSchema,
-    shapeOptions: {
-      url: `${process.env.EXPO_PUBLIC_ELECTRIC_URL}/v1/shape`,
-      params: {
-        table: `todos`,
-        source_id: process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID,
-        secret: process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_SECRET,
-      },
-      parser: {
-        timestamptz: (date: string) => parseISO(date),
-      },
-    },
-    // Direct Writes to Supabase
-    onInsert: async ({ transaction }) => {
-      const { id, ...data } = transaction.mutations[0].modified
-      const { error } = await supabase.from('todos').insert(data)
-      if (error) {
-        console.error("Supabase Insert Error", error)
-        throw error
-      }
-      return { txid: Date.now() }
-    },
-    onUpdate: async ({ transaction }) => {
-      const { original: { id }, changes } = transaction.mutations[0]
-      const { error } = await supabase.from('todos').update(changes).eq('id', id)
-      if (error) throw error
-      return { txid: Date.now() }
-    },
-    onDelete: async ({ transaction }) => {
-      const { id } = transaction.mutations[0].original
-      const { error } = await supabase.from('todos').delete().eq('id', id)
-      if (error) throw error
-      return { txid: Date.now() }
-    },
-    getKey: (item) => item.id,
-  })
-)
-
-// --- UI Components ---
+// Initialize DB on start
+initDatabase()
 
 export default function HomeScreen() {
-  const [newTodoText, setNewTodoText] = useState(``)
-  const { data: todos, isLoading } = useLiveQuery((q) => q.from({ todoCollection }))
+  const [items, setItems] = useState<any[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  // Sort todos: pending first, then completed. Newest first.
-  const sortedTodos = todos?.slice().sort((a, b) => {
-    if (a.completed === b.completed) {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  // Polling for updates (Simple reactivity for now since op-sqlite hooks need setup)
+  const refreshItems = useCallback(async () => {
+    try {
+      const results = await db.select().from(OR).orderBy(desc(OR.ts))
+      setItems(results)
+    } catch (e) {
+      console.error(e)
     }
-    return a.completed ? 1 : -1
-  }) || []
+  }, [])
 
-  const handleAddTodo = () => {
-    if (newTodoText.trim().length === 0) return
-    todoCollection.insert({
-      id: Math.floor(Math.random() * 100000000), // Temp ID
-      text: newTodoText.trim(),
-      completed: false,
-      created_at: new Date(),
-      updated_at: new Date(),
-    })
-    setNewTodoText(``)
-  }
+  useEffect(() => {
+    refreshItems()
+    const interval = setInterval(refreshItems, 2000) // Poll every 2s
+    return () => clearInterval(interval)
+  }, [refreshItems])
 
-  const toggleTodo = (todo: any) => {
-    todoCollection.update(todo.id, (draft) => {
-      draft.completed = !draft.completed
-      draft.updated_at = new Date()
-    })
-  }
+  const handleAddMemory = async () => {
+    if (!input.trim()) return
 
-  const deleteTodo = (id: number) => {
-    todoCollection.delete(id)
+    const newMemory = {
+      id: RandomUUID.v4(),
+      streamId: 'default-stream',
+      opcode: 1, // 1 = text content
+      payload: JSON.stringify({ text: input }), // Store as JSON string
+      scope: 'private',
+      status: 'active',
+      ts: new Date(),
+    }
+
+    try {
+      // 1. Write to local DB immediately
+      await db.insert(OR).values(newMemory)
+
+      // 2. Queue for Sync
+      await syncService.enqueueMutation('OR', 'INSERT', newMemory)
+
+      setInput('')
+      refreshItems()
+    } catch (e) {
+      console.error('Failed to add memory:', e)
+      alert('Failed to save memory')
+    }
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Header Area */}
       <View style={styles.header}>
-        <Text style={styles.date}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
-        <Text style={styles.title}>Tasks</Text>
-        <Text style={styles.subtitle}>{isLoading ? 'Syncing...' : `${sortedTodos.filter(t => !t.completed).length} pending`}</Text>
+        <Text style={styles.title}>Working Memories</Text>
+        <Text style={styles.subtitle}>{items.length} items • Offline Ready</Text>
       </View>
 
-      {/* Main List */}
-      <ScrollView
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {sortedTodos.map((item) => (
-          <View key={item.id} style={styles.todoItem}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => toggleTodo(item)}
-              style={[styles.checkboxBase, item.completed && styles.checkboxChecked]}
-            >
-              {item.completed && <View style={styles.checkboxCheck} />}
-            </TouchableOpacity>
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        {items.map((item) => {
+          let content = 'Unknown Payload'
+          try {
+            const parsed = JSON.parse(item.payload)
+            content = parsed.text || JSON.stringify(parsed)
+          } catch (e) { content = item.payload }
 
-            <View style={styles.todoTextContainer}>
-              <Text style={[styles.todoText, item.completed && styles.todoTextCompleted]}>
-                {item.text}
-              </Text>
+          return (
+            <View key={item.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
+                <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
+                  <Text style={styles.badgeText}>{item.status}</Text>
+                </View>
+              </View>
+              <Text style={styles.cardBody}>{content}</Text>
+              <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
             </View>
-
-            <TouchableOpacity
-              onPress={() => deleteTodo(item.id)}
-              style={styles.deleteButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.deleteButtonText}>×</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-
-        <View style={{ height: 100 }} />
+          )
+        })}
       </ScrollView>
 
-      {/* Bottom Input Area */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.inputWrapper}
@@ -154,49 +110,35 @@ export default function HomeScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            value={newTodoText}
-            onChangeText={setNewTodoText}
-            placeholder="Add a new task..."
+            value={input}
+            onChangeText={setInput}
+            placeholder="New memory..."
             placeholderTextColor="#999"
-            onSubmitEditing={handleAddTodo}
-            returnKeyType="done"
           />
-          <TouchableOpacity
-            onPress={handleAddTodo}
-            style={[styles.addButton, { opacity: newTodoText ? 1 : 0.5 }]}
-            disabled={!newTodoText}
-          >
-            <Text style={styles.addButtonText}>↑</Text>
+          <TouchableOpacity onPress={handleAddMemory} style={styles.sendButton}>
+            <Text style={styles.sendButtonText}>+</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Clean white for flat list
+    backgroundColor: '#F9FAFB',
   },
   header: {
-    paddingHorizontal: 24,
-    paddingTop: 80,
-    paddingBottom: 24,
-  },
-  date: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
+    padding: 24,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   title: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#111827', // Almost black
-    letterSpacing: -0.5,
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
   },
   subtitle: {
     fontSize: 14,
@@ -207,57 +149,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    padding: 24,
+    paddingBottom: 100,
   },
-  todoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingVertical: 16,
-    paddingHorizontal: 0, // Align with header text
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  checkboxBase: {
-    width: 24,
-    height: 24,
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    borderWidth: 2,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  checkboxChecked: {
-    backgroundColor: '#111827', // Black accent
-    borderColor: '#111827',
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  checkboxCheck: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'white',
+  cardId: {
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: '#9CA3AF',
   },
-  todoTextContainer: {
-    flex: 1,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 99,
   },
-  todoText: {
-    fontSize: 16,
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
     color: '#374151',
-    fontWeight: '500',
+    textTransform: 'uppercase',
   },
-  todoTextCompleted: {
-    color: '#D1D5DB',
-    textDecorationLine: 'line-through',
+  cardBody: {
+    fontSize: 16,
+    color: '#1F2937',
+    lineHeight: 24,
   },
-  deleteButton: {
-    padding: 8,
-  },
-  deleteButtonText: {
-    fontSize: 20,
-    color: '#E5E7EB', // Subtle delete icon, pop on hover not relevant for mobile/touch
-    fontWeight: '300',
+  cardFooter: {
+    marginTop: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'right',
   },
   inputWrapper: {
     position: 'absolute',
@@ -268,38 +205,35 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    margin: 24,
+    margin: 16,
+    marginBottom: 32,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    // Floating shadow
+    borderRadius: 24,
+    padding: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   input: {
     flex: 1,
     height: 48,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
   },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#111827',
+  sendButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#2563EB',
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonText: {
+  sendButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: -2
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 })
+
