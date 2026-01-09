@@ -16,6 +16,7 @@ import { initDatabase } from '../src/db/init'
 import { db } from '../src/db/client'
 import { OR } from '../src/db/schema'
 import { syncService } from '../src/services/SyncService'
+import { electricSync } from '../src/services/ShapeStream'
 import { desc } from 'drizzle-orm'
 import RandomUUID from 'react-native-random-uuid'
 
@@ -26,6 +27,12 @@ export default function HomeScreen() {
   const [items, setItems] = useState<any[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Start Sync Services
+  useEffect(() => {
+    electricSync.start()
+    return () => electricSync.stop()
+  }, [])
 
   // Polling for updates (Simple reactivity for now since op-sqlite hooks need setup)
   const refreshItems = useCallback(async () => {
