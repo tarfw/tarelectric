@@ -28,6 +28,7 @@
     "drizzle-zod": "^0.8.2",
     "expo": "54.0.31",
     "expo-constants": "^18.0.13",
+    "expo-crypto": "^15.0.8",
     "expo-router": "~6.0.21",
     "expo-status-bar": "~3.0.9",
     "express": "^5.1.0",

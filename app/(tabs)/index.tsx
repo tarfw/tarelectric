@@ -3,30 +3,26 @@ import React, { useEffect, useState, useCallback } from 'react'
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { router } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { initDatabase } from '../../src/db/init'
 import { db } from '../../src/db/client'
 import { OR } from '../../src/db/schema'
-import { syncService } from '../../src/services/SyncService'
 import { electricSync } from '../../src/services/ShapeStream'
 import { desc } from 'drizzle-orm'
-import RandomUUID from 'react-native-random-uuid'
 
 // Initialize DB on start
 initDatabase()
 
 export default function HomeScreen() {
   const [items, setItems] = useState<any[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
 
   // Start Sync Services
   useEffect(() => {
@@ -46,36 +42,13 @@ export default function HomeScreen() {
 
   useEffect(() => {
     refreshItems()
-    const interval = setInterval(refreshItems, 2000) // Poll every 2s
+    // Poll more frequently to catch local updates quickly
+    const interval = setInterval(refreshItems, 1000)
     return () => clearInterval(interval)
   }, [refreshItems])
 
-  const handleAddMemory = async () => {
-    if (!input.trim()) return
-
-    const newMemory = {
-      id: RandomUUID.v4(),
-      streamId: 'default-stream',
-      opcode: 1, // 1 = text content
-      payload: JSON.stringify({ text: input }), // Store as JSON string
-      scope: 'private',
-      status: 'active',
-      ts: new Date(),
-    }
-
-    try {
-      // 1. Write to local DB immediately
-      await db.insert(OR).values(newMemory)
-
-      // 2. Queue for Sync
-      await syncService.enqueueMutation('OR', 'INSERT', newMemory)
-
-      setInput('')
-      refreshItems()
-    } catch (e) {
-      console.error('Failed to add memory:', e)
-      alert('Failed to save memory')
-    }
+  const handleAddPress = () => {
+    router.push('/add-memory')
   }
 
   return (
@@ -91,9 +64,9 @@ export default function HomeScreen() {
         {items.map((item) => {
           let content = 'Unknown Payload'
           try {
-            const parsed = JSON.parse(item.payload)
+            const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload
             content = parsed.text || JSON.stringify(parsed)
-          } catch (e) { content = item.payload }
+          } catch (e) { content = String(item.payload) }
 
           return (
             <View key={item.id} style={styles.card}>
@@ -110,23 +83,13 @@ export default function HomeScreen() {
         })}
       </ScrollView>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.inputWrapper}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={handleAddPress}
+        activeOpacity={0.8}
       >
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder="New memory..."
-            placeholderTextColor="#999"
-          />
-          <TouchableOpacity onPress={handleAddMemory} style={styles.sendButton}>
-            <Text style={styles.sendButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        <Ionicons name="add" size={32} color="#FFFFFF" />
+      </TouchableOpacity>
     </SafeAreaView>
   )
 }
@@ -203,44 +166,21 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'right',
   },
-  inputWrapper: {
+  fab: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'transparent',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    margin: 16,
-    marginBottom: 32,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  sendButton: {
-    width: 48,
-    height: 48,
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#2563EB',
-    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: 'bold',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    zIndex: 100,
   },
 })
-

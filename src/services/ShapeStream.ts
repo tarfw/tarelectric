@@ -1,10 +1,12 @@
 import { ShapeStream } from '@electric-sql/client'
+import { Platform } from 'react-native'
 import { db } from '../db/client'
 import { OR } from '../db/schema'
-import { sql } from 'drizzle-orm'
+import { sql, eq } from 'drizzle-orm'
 
 // Config
-const ELECTRIC_URL = process.env.EXPO_PUBLIC_ELECTRIC_URL || 'http://localhost:3000'
+const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000'
+const ELECTRIC_URL = process.env.EXPO_PUBLIC_ELECTRIC_URL || DEFAULT_URL
 const BASE_URL = `${ELECTRIC_URL}/v1/shape`
 
 export class ElectricSync {
@@ -28,42 +30,68 @@ export class ElectricSync {
                 // Use a transaction for batch updates
                 await db.transaction(async (tx) => {
                     for (const message of messages) {
-                        // Handle different message types (insert/update/delete are usually combined in 'data' for shapes, 
-                        // but the protocol sends 'headers' and 'value'. 
-                        // For the basic JSON client, messages are row updates.)
+                        const { headers, value } = message as any
 
-                        // The ShapeStream yields arrays of Row changes.
-                        // Assuming message is the Row object directly for now, or we need to check the library structure.
-                        // Validating structure: standard Electric client streams Row objects.
+                        // 1. Handle Control Messages (no value)
+                        if (!value) {
+                            if (headers.control === 'up-to-date') {
+                                // console.log('[ShapeStream] Up to date')
+                            }
+                            continue
+                        }
 
-                        const row = message as any
-
-                        // Handle headers/control messages if any (offsets usually handled by client)
-                        if (row.headers) return
+                        // 2. Handle Data Messages
+                        const row = value
+                        const operation = headers.operation // 'insert' | 'update' | 'delete'
 
                         try {
-                            // UPSERT Strategy
-                            await tx.insert(OR).values({
-                                id: row.id,
-                                streamId: row.streamId,
-                                opcode: Number(row.opcode),
-                                delta: row.delta ? Number(row.delta) : null,
-                                payload: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
-                                scope: row.scope,
-                                status: row.status,
-                                ts: new Date(row.ts), // Ensure date parsing
-                            }).onConflictDoUpdate({
-                                target: OR.id,
-                                set: {
+                            // Helper to safely parse dates (handles Postgres +00 offset)
+                            const parseDate = (dateStr: any) => {
+                                if (!dateStr) return new Date()
+                                if (typeof dateStr === 'string' && dateStr.includes('+00') && !dateStr.includes(':00+00')) {
+                                    return new Date(dateStr.replace('+00', 'Z'))
+                                }
+                                return new Date(dateStr)
+                            }
+
+                            if (operation === 'delete') {
+                                await tx.delete(OR).where(eq(OR.id, row.id))
+                            } else if (operation === 'update') {
+                                // For updates, only update the fields that are present
+                                const updates: any = {}
+                                if (row.streamId !== undefined) updates.streamId = row.streamId
+                                if (row.opcode !== undefined) updates.opcode = Number(row.opcode)
+                                if (row.delta !== undefined) updates.delta = Number(row.delta)
+                                if (row.payload !== undefined) updates.payload = typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload)
+                                if (row.scope !== undefined) updates.scope = row.scope
+                                if (row.status !== undefined) updates.status = row.status
+                                if (row.ts !== undefined) updates.ts = parseDate(row.ts)
+
+                                await tx.update(OR).set(updates).where(eq(OR.id, row.id))
+                            } else {
+                                // insert (or upsert to be safe, assuming full row)
+                                await tx.insert(OR).values({
+                                    id: row.id,
                                     streamId: row.streamId,
                                     opcode: Number(row.opcode),
                                     delta: row.delta ? Number(row.delta) : null,
                                     payload: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
                                     scope: row.scope,
                                     status: row.status,
-                                    ts: new Date(row.ts),
-                                }
-                            })
+                                    ts: parseDate(row.ts),
+                                }).onConflictDoUpdate({
+                                    target: OR.id,
+                                    set: {
+                                        streamId: row.streamId,
+                                        opcode: Number(row.opcode),
+                                        delta: row.delta ? Number(row.delta) : null,
+                                        payload: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
+                                        scope: row.scope,
+                                        status: row.status,
+                                        ts: parseDate(row.ts),
+                                    }
+                                })
+                            }
                         } catch (err) {
                             console.error('Failed to sync row', row.id, err)
                         }

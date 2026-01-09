@@ -6,6 +6,14 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="add-memory"
+          options={{
+            presentation: 'modal',
+            title: 'New Memory',
+            headerShown: true
+          }}
+        />
       </Stack>
     </SafeAreaProvider>
   )
