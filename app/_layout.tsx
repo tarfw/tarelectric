@@ -55,10 +55,25 @@ function RootLayoutNav() {
   )
 }
 
+import { BlueskyProvider } from '../src/context/BlueskyContext'
+
+import * as NavigationBar from 'expo-navigation-bar'
+import { Platform } from 'react-native'
+
 export default function RootLayout() {
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setPositionAsync('absolute')
+      NavigationBar.setBackgroundColorAsync('#ffffff00')
+      NavigationBar.setButtonStyleAsync('dark') // icons color
+    }
+  }, [])
+
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <BlueskyProvider>
+        <RootLayoutNav />
+      </BlueskyProvider>
     </AuthProvider>
   )
 }
