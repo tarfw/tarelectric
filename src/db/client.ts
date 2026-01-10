@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/op-sqlite'
 import * as schema from './schema'
 
 // Create a database instance
-const opsqlite = open({
+export const opsqlite = open({
     name: 'myDb.sqlite',
 })
 

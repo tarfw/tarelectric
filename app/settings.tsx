@@ -29,147 +29,147 @@ export default function SettingsScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.sectionTitle}>App Account</Text>
-                <Text style={styles.userInfo}>Logged in as: {user?.email}</Text>
-                <TouchableOpacity style={styles.button} onPress={signOutApp}>
-                    <Text style={styles.buttonText}>Sign Out of App</Text>
-                </TouchableOpacity>
 
-                <View style={styles.divider} />
-
-                <Text style={styles.sectionTitle}>Bluesky Integration</Text>
-                {loadingBsky ? (
-                    <ActivityIndicator style={{ marginTop: 20 }} />
-                ) : isBskyAuth ? (
-                    <View style={styles.bskyContainer}>
-                        <Text style={styles.successText}>
-                            Connected as @{userProfile?.handle || 'Unknown'}
-                        </Text>
-                        <Text style={styles.didText}>{userProfile?.did}</Text>
-
-                        <TouchableOpacity
-                            style={[styles.button, styles.disconnectButton]}
-                            onPress={logoutBsky}
-                        >
-                            <Text style={styles.buttonText}>Disconnect Bluesky</Text>
-                        </TouchableOpacity>
+                <View style={styles.section}>
+                    <Text style={styles.sectionHeader}>ACCOUNT</Text>
+                    <View style={styles.row}>
+                        <Text style={styles.label}>Email</Text>
+                        <Text style={styles.value}>{user?.email}</Text>
                     </View>
-                ) : (
-                    <View style={styles.bskyForm}>
-                        <Text style={styles.hint}>
-                            Use your Bluesky handle and App Password (recommended).
-                        </Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Handle (e.g. alice.bsky.social)"
-                            value={bskyId}
-                            onChangeText={setBskyId}
-                            autoCapitalize="none"
-                        />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="App Password"
-                            value={bskyPass}
-                            onChangeText={setBskyPass}
-                            secureTextEntry
-                        />
-                        <TouchableOpacity
-                            style={[styles.button, styles.connectButton, connecting && styles.buttonDisabled]}
-                            onPress={handleConnectBluesky}
-                            disabled={connecting}
-                        >
-                            <Text style={styles.buttonText}>
-                                {connecting ? 'Connecting...' : 'Connect to Bluesky'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                    <TouchableOpacity style={styles.row} onPress={signOutApp}>
+                        <Text style={[styles.label, styles.dangerText]}>Sign Out</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionHeader}>BLUESKY</Text>
+
+                    {loadingBsky ? (
+                        <View style={styles.loadingRow}>
+                            <ActivityIndicator color="#000" />
+                        </View>
+                    ) : isBskyAuth ? (
+                        <>
+                            <View style={styles.row}>
+                                <Text style={styles.label}>Handle</Text>
+                                <Text style={styles.value}>@{userProfile?.handle || 'Unknown'}</Text>
+                            </View>
+                            <TouchableOpacity style={styles.row} onPress={logoutBsky}>
+                                <Text style={[styles.label, styles.dangerText]}>Disconnect</Text>
+                            </TouchableOpacity>
+                        </>
+                    ) : (
+                        <View style={styles.formSection}>
+                            <Text style={styles.helperText}>Connect your account to chat.</Text>
+
+                            <TextInput
+                                style={styles.minimalInput}
+                                placeholder="Handle (e.g. alice.bsky.social)"
+                                value={bskyId}
+                                onChangeText={setBskyId}
+                                autoCapitalize="none"
+                                placeholderTextColor="#999"
+                            />
+                            <TextInput
+                                style={styles.minimalInput}
+                                placeholder="App Password"
+                                value={bskyPass}
+                                onChangeText={setBskyPass} // Corrected
+                                secureTextEntry
+                                placeholderTextColor="#999"
+                            />
+                            <TouchableOpacity
+                                style={[styles.minimalButton, connecting && styles.disabled]}
+                                onPress={handleConnectBluesky}
+                                disabled={connecting}
+                            >
+                                <Text style={styles.minimalButtonText}>
+                                    {connecting ? 'Connecting...' : 'Connect'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+
             </ScrollView>
-        </SafeAreaView>
+        </View>
     )
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#fff', // Clean white background
     },
     content: {
-        padding: 24,
-        paddingBottom: 40,
+        paddingTop: 20,
     },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginTop: 16,
-        marginBottom: 16,
+    section: {
+        marginBottom: 40,
     },
-    userInfo: {
-        fontSize: 16,
-        color: '#6B7280',
-        marginBottom: 16,
-    },
-    button: {
-        backgroundColor: '#EF4444',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    buttonText: {
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#E5E7EB',
-        marginVertical: 32,
-    },
-    bskyContainer: {
-        backgroundColor: '#F3F4F6',
-        padding: 16,
-        borderRadius: 12,
-    },
-    successText: {
-        fontSize: 16,
+    sectionHeader: {
+        fontSize: 13,
         fontWeight: '600',
-        color: '#059669',
-        marginBottom: 4,
-    },
-    didText: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginBottom: 16,
-        fontFamily: 'monospace',
-    },
-    disconnectButton: {
-        backgroundColor: '#6B7280',
-    },
-    bskyForm: {
-        gap: 12,
-    },
-    hint: {
-        fontSize: 14,
-        color: '#6B7280',
+        color: '#8E8E93', // iOS gray
         marginBottom: 8,
+        marginLeft: 20,
+        textTransform: 'uppercase',
     },
-    input: {
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        padding: 16,
-        fontSize: 16,
-        backgroundColor: '#F9FAFB',
-        color: '#111827',
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        backgroundColor: '#fff',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#E5E5EA',
     },
-    connectButton: {
-        backgroundColor: '#0085FF', // Bluesky brand color approximately
+    loadingRow: {
+        padding: 20,
+        alignItems: 'flex-start',
+    },
+    label: {
+        fontSize: 17,
+        color: '#000',
+        fontWeight: '400',
+    },
+    value: {
+        fontSize: 17,
+        color: '#8E8E93',
+    },
+    dangerText: {
+        color: '#FF3B30', // iOS Red
+    },
+    formSection: {
+        paddingHorizontal: 20,
+    },
+    helperText: {
+        fontSize: 15,
+        color: '#8E8E93',
+        marginBottom: 16,
+    },
+    minimalInput: {
+        fontSize: 17,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E5EA',
+        marginBottom: 16,
+        color: '#000',
+    },
+    minimalButton: {
         marginTop: 8,
+        paddingVertical: 12,
+        alignItems: 'flex-start',
     },
-    buttonDisabled: {
-        opacity: 0.7,
+    minimalButtonText: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#007AFF', // iOS Blue
+    },
+    disabled: {
+        opacity: 0.5,
     },
 })

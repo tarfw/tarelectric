@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -16,13 +18,16 @@ import { initDatabase } from '../../src/db/init'
 import { db } from '../../src/db/client'
 import { OR } from '../../src/db/schema'
 import { electricSync } from '../../src/services/ShapeStream'
-import { desc } from 'drizzle-orm'
+import { vectorStore } from '../../src/services/VectorStore' // Import VectorStore
+import { desc, inArray } from 'drizzle-orm'
 
 // Initialize DB on start
 initDatabase()
 
 export default function HomeScreen() {
   const [items, setItems] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
 
   // Start Sync Services
   useEffect(() => {
@@ -30,22 +35,66 @@ export default function HomeScreen() {
     return () => electricSync.stop()
   }, [])
 
-  // Polling for updates (Simple reactivity for now since op-sqlite hooks need setup)
-  const refreshItems = useCallback(async () => {
+  // 1. Load All Items (Default)
+  const loadAllItems = useCallback(async () => {
     try {
       const results = await db.select().from(OR).orderBy(desc(OR.ts))
       setItems(results)
     } catch (e) {
-      console.error(e)
+      console.error('Load Error:', e)
     }
   }, [])
 
+  // 2. Perform Vector Search
+  const performSearch = useCallback(async (text: string) => {
+    if (!text.trim()) {
+      setIsSearching(false)
+      loadAllItems()
+      return
+    }
+
+    setIsSearching(true)
+    try {
+      // Get similar IDs from Vector Store
+      const searchResults = await vectorStore.search(text, 10) // Top 10
+      const ids = searchResults.map(r => r.id)
+
+      if (ids.length === 0) {
+        setItems([]) // No matches
+      } else {
+        // Fetch full objects from DB for these IDs
+        // Note: Drizzle's `inArray` might need non-empty array
+        const dbItems = await db.select().from(OR).where(inArray(OR.id, ids))
+
+        // Sort by relevance (order of IDs in searchResults)
+        const sortedItems = dbItems.sort((a, b) => {
+          return ids.indexOf(a.id) - ids.indexOf(b.id)
+        })
+
+        setItems(sortedItems)
+      }
+    } catch (e) {
+      console.error('Search Error:', e)
+    } finally {
+      setIsSearching(false)
+    }
+  }, [loadAllItems])
+
+  // Debounced Search or Manual Trigger? 
+  // For simplicity, we search on submit or with a small debounce if desired. 
+  // Let's do onChange for now with a slight natural delay effect (user stops typing)
+  // or just a submit button. Let's do onSubmitEditing for clarity.
+
+  // Poll for updates ONLY if not searching
   useEffect(() => {
-    refreshItems()
-    // Poll more frequently to catch local updates quickly
-    const interval = setInterval(refreshItems, 1000)
+    if (searchQuery) return
+
+    loadAllItems()
+    const interval = setInterval(() => {
+      if (!searchQuery) loadAllItems()
+    }, 2000)
     return () => clearInterval(interval)
-  }, [refreshItems])
+  }, [searchQuery, loadAllItems])
 
   const handleAddPress = () => {
     router.push('/add-memory')
@@ -57,31 +106,66 @@ export default function HomeScreen() {
 
       <View style={styles.header}>
         <Text style={styles.title}>Working Memories</Text>
-        <Text style={styles.subtitle}>{items.length} items • Offline Ready</Text>
+        <Text style={styles.subtitle}>
+          {items.length} items • {searchQuery ? 'Semantic Search' : 'Offline Ready'}
+        </Text>
+
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search memories..."
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text)
+              if (text === '') loadAllItems()
+            }}
+            onSubmitEditing={() => performSearch(searchQuery)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => {
+              setSearchQuery('')
+              loadAllItems()
+            }}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        {items.map((item) => {
-          let content = 'Unknown Payload'
-          try {
-            const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload
-            content = parsed.text || JSON.stringify(parsed)
-          } catch (e) { content = String(item.payload) }
+      {isSearching ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Searching semantic vector index...</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+          {items.map((item) => {
+            let content = 'Unknown Payload'
+            try {
+              const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload
+              content = parsed.text || JSON.stringify(parsed)
+            } catch (e) { content = String(item.payload) }
 
-          return (
-            <View key={item.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
-                <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
-                  <Text style={styles.badgeText}>{item.status}</Text>
+            return (
+              <View key={item.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
+                  <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
+                    <Text style={styles.badgeText}>{item.status}</Text>
+                  </View>
                 </View>
+                <Text style={styles.cardBody}>{content}</Text>
+                <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
               </View>
-              <Text style={styles.cardBody}>{content}</Text>
-              <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
-            </View>
-          )
-        })}
-      </ScrollView>
+            )
+          })}
+          {items.length === 0 && (
+            <Text style={styles.emptyText}>No memories found.</Text>
+          )}
+        </ScrollView>
+      )}
 
       <TouchableOpacity
         style={styles.fab}
@@ -114,6 +198,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 4,
+    marginBottom: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#6B7280',
+    fontSize: 14,
   },
   list: {
     flex: 1,
@@ -165,6 +277,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     textAlign: 'right',
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 40,
+    color: '#9CA3AF',
+    fontSize: 16,
   },
   fab: {
     position: 'absolute',

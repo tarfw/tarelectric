@@ -3,6 +3,7 @@ import { Platform } from 'react-native'
 import { db } from '../db/client'
 import { OR } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
+import { vectorStore } from './VectorStore'
 
 // Config
 const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000'
@@ -56,6 +57,8 @@ export class ElectricSync {
 
                             if (operation === 'delete') {
                                 await tx.delete(OR).where(eq(OR.id, row.id))
+                                // Clean up vector index asynchronously
+                                vectorStore.deleteDocument(row.id).catch(console.error)
                             } else if (operation === 'update') {
                                 // For updates, only update the fields that are present
                                 const updates: any = {}
@@ -91,6 +94,17 @@ export class ElectricSync {
                                         ts: parseDate(row.ts),
                                     }
                                 })
+
+                                // Index the payload for vector search
+                                // Doing this async to not block the sync transaction
+                                if (row.payload) {
+                                    const textContent = typeof row.payload === 'string'
+                                        ? row.payload
+                                        : JSON.stringify(row.payload);
+
+                                    // Basic heuristic: Index if it looks like content
+                                    vectorStore.addDocument(row.id, textContent).catch(console.error);
+                                }
                             }
                         } catch (err) {
                             console.error('Failed to sync row', row.id, err)
