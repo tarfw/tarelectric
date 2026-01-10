@@ -1,7 +1,8 @@
 import React from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Text, StyleSheet, View, FlatList } from 'react-native'
+import { Text, StyleSheet, View, FlatList, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 
 const DUMMY_CHATS = [
     { id: '1', name: 'Alice', message: 'Hey, did you see the update?', time: '10:30 AM' },
@@ -10,10 +11,15 @@ const DUMMY_CHATS = [
 ]
 
 export default function RelayScreen() {
+    const router = useRouter()
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Relay</Text>
+                <TouchableOpacity onPress={() => router.push('/settings')}>
+                    <Ionicons name="settings-outline" size={24} color="#111827" />
+                </TouchableOpacity>
             </View>
             <FlatList
                 data={DUMMY_CHATS}
@@ -47,10 +53,14 @@ const styles = StyleSheet.create({
         padding: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
+        color: '#111827',
     },
     list: {
         padding: 16,
@@ -82,6 +92,7 @@ const styles = StyleSheet.create({
     name: {
         fontWeight: '600',
         fontSize: 16,
+        color: '#111827',
     },
     time: {
         color: '#9CA3AF',
