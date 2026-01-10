@@ -124,7 +124,12 @@ export default function HomeScreen() {
       <StatusBar style="dark" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Working Memories</Text>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.title}>Working Memories</Text>
+          <TouchableOpacity onPress={handleAddPress} style={styles.headerAddBtn}>
+            <Ionicons name="add" size={24} color="#2563EB" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.subtitle}>
           {items.length} items • {searchQuery ? 'Semantic Search' : 'Offline Ready'}
         </Text>
@@ -202,14 +207,6 @@ export default function HomeScreen() {
           )}
         </ScrollView>
       )}
-
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleAddPress}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={32} color="#FFFFFF" />
-      </TouchableOpacity>
     </SafeAreaView>
   )
 }
@@ -224,6 +221,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerAddBtn: {
+    padding: 4,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
   },
   title: {
     fontSize: 24,
@@ -319,22 +326,5 @@ const styles = StyleSheet.create({
     marginTop: 40,
     color: '#9CA3AF',
     fontSize: 16,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 100,
   },
 })

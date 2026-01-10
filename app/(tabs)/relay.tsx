@@ -115,7 +115,7 @@ export default function RelayScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Relay (Bluesky)</Text>
+                <Text style={styles.headerTitle}>Relay</Text>
                 <TouchableOpacity onPress={() => router.push('/settings')}>
                     <Ionicons name="settings-outline" size={24} color="#111827" />
                 </TouchableOpacity>

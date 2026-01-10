@@ -24,7 +24,14 @@ export const useBluesky = () => {
 
 export function BlueskyProvider({ children }: { children: React.ReactNode }) {
     // Determine service URL. Using bsky.social for now.
-    const [agent] = useState(() => new BskyAgent({ service: 'https://bsky.social' }))
+    const [agent] = useState(() => new BskyAgent({
+        service: 'https://bsky.social',
+        persistSession: async (evt, session) => {
+            if (evt === 'create' || evt === 'update') {
+                await AsyncStorage.setItem('bsky_session', JSON.stringify(session))
+            }
+        }
+    }))
     const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [loading, setLoading] = useState(true)
     const [userProfile, setUserProfile] = useState<any | null>(null)

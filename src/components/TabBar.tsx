@@ -44,11 +44,11 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                         });
                     };
 
-                    // Determine icon name
+                    // Determine icon name (Always outline/simple per request)
                     let iconName: keyof typeof Ionicons.glyphMap = 'help';
-                    if (route.name === 'index') iconName = isFocused ? 'layers' : 'layers-outline';
-                    if (route.name === 'agent') iconName = isFocused ? 'sparkles' : 'sparkles-outline';
-                    if (route.name === 'relay') iconName = isFocused ? 'radio' : 'radio-outline';
+                    if (route.name === 'index') iconName = 'ellipse-outline';
+                    if (route.name === 'agent') iconName = 'square-outline';
+                    if (route.name === 'relay') iconName = 'at-outline';
 
                     return (
                         <TouchableOpacity
@@ -62,11 +62,11 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                             style={styles.tabItem}
                             activeOpacity={0.7}
                         >
-                            <View style={styles.iconContainer}>
+                            <View style={[styles.iconContainer, isFocused && { backgroundColor: '#F1F5F9' }]}>
                                 <Ionicons
                                     name={iconName}
                                     size={24}
-                                    color={isFocused ? '#0F172A' : '#94A3B8'}
+                                    color="#334155" // Slate 700 - Constant color
                                 />
                             </View>
                         </TouchableOpacity>
@@ -94,9 +94,10 @@ const styles = StyleSheet.create({
         right: 0,
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-end',
+        alignItems: 'center', // Center vertically in the bar
         paddingHorizontal: 24,
-        pointerEvents: 'box-none', // Allow clicks to pass through empty space
+        backgroundColor: '#FFFFFF', // Solid white background
+        paddingTop: 16, // Space above items
     },
     tabPill: {
         flexDirection: 'row',
@@ -113,11 +114,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         height: 56,
         width: 56,
-        borderRadius: 28,
+        // borderRadius moved to inner container
     },
     iconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
+        width: 44,
+        height: 44,
+        borderRadius: 100, // Fully rounded circle
+        overflow: 'hidden',
     },
     searchCircle: {
         width: 56,
