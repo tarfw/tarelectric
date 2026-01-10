@@ -123,6 +123,7 @@ export default function HomeScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Search memories..."
+            placeholderTextColor="#6B7280"
             value={searchQuery}
             onChangeText={(text) => {
               setSearchQuery(text)
