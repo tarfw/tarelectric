@@ -182,6 +182,7 @@ const styles = StyleSheet.create({
     list: {
         flexGrow: 1,
         padding: 16,
+        paddingBottom: 120,
     },
     chatItem: {
         flexDirection: 'row',

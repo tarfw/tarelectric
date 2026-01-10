@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text, StyleSheet, View, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, StatusBar } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, StyleSheet, View, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, StatusBar, DeviceEventEmitter } from 'react-native';
 import { tursoService } from '../../src/services/TursoService';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,10 +9,21 @@ export default function AgentScreen() {
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
+    const [isInputMode, setIsInputMode] = useState(false);
+    const inputRef = useRef<TextInput>(null);
 
-    // Initial load
+    // Initial load & Event Listener
     React.useEffect(() => {
         loadRecent();
+
+        const sub = DeviceEventEmitter.addListener('TRIGGER_SEARCH_ACTION', () => {
+            setIsInputMode(true);
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 100);
+        });
+
+        return () => sub.remove();
     }, []);
 
     const loadRecent = async () => {
@@ -29,13 +40,15 @@ export default function AgentScreen() {
 
     const handleSearch = async () => {
         if (!searchText.trim()) {
-            loadRecent();
+            setIsInputMode(false);
             return;
         }
         setLoading(true);
         try {
             const hits = await tursoService.search(searchText);
             setResults(hits);
+            setIsInputMode(false);
+            setSearchText('');
         } catch (e) {
             console.error(e);
             Alert.alert('Error', 'Failed to search memories');
@@ -82,58 +95,78 @@ export default function AgentScreen() {
         </View>
     );
 
+    const insets = useSafeAreaInsets();
+    // TabBar height approx 64 + 20 (padding) + insets.bottom
+    const tabBarHeight = 64 + 20 + insets.bottom;
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
 
+            {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.headerTitle}>Memories</Text>
-                    <Text style={styles.headerSubtitle}>{results.length} items stored in Turso</Text>
+                    <Text style={styles.headerTitle}>Agent</Text>
+                    <Text style={styles.headerSubtitle}>{results.length} memories active</Text>
                 </View>
                 <TouchableOpacity onPress={loadRecent} style={styles.refreshBtn}>
-                    <Ionicons name="refresh-outline" size={20} color="#666" />
+                    <Ionicons name="refresh-outline" size={20} color="#64748B" />
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.searchSection}>
-                <View style={styles.searchBar}>
-                    <Ionicons name="search" size={20} color="#9CA3AF" />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Search or type to add..."
-                        placeholderTextColor="#9CA3AF"
-                        value={searchText}
-                        onChangeText={setSearchText}
-                        onSubmitEditing={handleSearch}
-                        returnKeyType="search"
-                    />
-                    {searchText.length > 0 && (
-                        <TouchableOpacity onPress={handleAddTestMemory} disabled={adding}>
-                            {adding ? (
-                                <ActivityIndicator size="small" color="#000" />
-                            ) : (
-                                <Ionicons name="add-circle" size={28} color="#111827" />
-                            )}
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-
+            {/* Main Content */}
             <FlatList
                 data={results}
                 keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
                 renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 20 }]}
                 showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                        <Ionicons name="documents-outline" size={48} color="#E5E7EB" />
-                        <Text style={styles.emptyText}>No memories found</Text>
+                        <Ionicons name="sparkles-outline" size={48} color="#E2E8F0" />
+                        <Text style={styles.emptyText}>Ask me anything or save a memory...</Text>
                     </View>
                 }
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
             />
+
+            {/* Full Screen Notion-Like Input Overlay */}
+            {isInputMode && (
+                <View style={[styles.inputOverlay, { paddingTop: insets.top + 20 }]}>
+                    <View style={styles.inputHeader}>
+                        <TouchableOpacity onPress={() => setIsInputMode(false)} style={styles.closeButton}>
+                            <Ionicons name="close" size={28} color="#94A3B8" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={handleSearch}
+                            disabled={loading || searchText.trim().length === 0}
+                            style={[
+                                styles.sendButton,
+                                (loading || searchText.trim().length === 0) && styles.sendButtonDisabled
+                            ]}
+                        >
+                            {loading ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    <TextInput
+                        ref={inputRef}
+                        style={styles.largeInput}
+                        placeholder="What's on your mind?"
+                        placeholderTextColor="#CBD5E1"
+                        value={searchText}
+                        onChangeText={setSearchText}
+                        multiline
+                        maxLength={1000}
+                        textAlignVertical="top"
+                    />
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -144,98 +177,123 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
     },
     header: {
-        paddingHorizontal: 20,
-        paddingTop: 10,
-        paddingBottom: 20,
+        paddingHorizontal: 24,
+        paddingTop: 16,
+        paddingBottom: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
     },
     headerTitle: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: '800',
-        color: '#111827',
+        color: '#0F172A', // Slate 900
         letterSpacing: -0.5,
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: '#6B7280',
+        fontSize: 13,
+        color: '#64748B', // Slate 500
         fontWeight: '500',
-        marginTop: 4,
+        marginTop: 2,
     },
     refreshBtn: {
         padding: 8,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#F1F5F9',
         borderRadius: 20,
     },
-    searchSection: {
-        paddingHorizontal: 20,
-        marginBottom: 20,
-    },
-    searchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F9FAFB',
-        borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    input: {
-        flex: 1,
-        marginLeft: 10,
-        fontSize: 16,
-        color: '#111827',
-        fontWeight: '500',
-    },
     listContent: {
-        paddingHorizontal: 20,
-        paddingBottom: 40,
+        paddingHorizontal: 24,
+        paddingTop: 20,
     },
     itemContainer: {
-        paddingVertical: 16,
+        paddingVertical: 12,
     },
     itemHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 6,
     },
     itemDate: {
-        fontSize: 12,
-        color: '#9CA3AF',
+        fontSize: 11,
+        color: '#94A3B8',
         fontWeight: '600',
         textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     matchBadge: {
-        backgroundColor: '#ECFDF5',
+        backgroundColor: '#F1F5F9',
         paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingVertical: 2,
         borderRadius: 12,
     },
     matchText: {
-        fontSize: 12,
-        color: '#059669',
-        fontWeight: '700',
+        fontSize: 10,
+        color: '#64748B',
+        fontWeight: '600',
     },
     itemContent: {
-        fontSize: 16,
-        color: '#374151',
-        lineHeight: 24,
+        fontSize: 15,
+        color: '#1E293B', // Slate 800
+        lineHeight: 22,
     },
     separator: {
         height: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#E2E8F0', // Slate 200
+        marginVertical: 4,
+    },
+
+    // Notion-Like Input Overlay Styles
+    inputOverlay: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#FFFFFF',
+        zIndex: 1000, // Cover everything
+        paddingHorizontal: 24,
+    },
+    inputHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    closeButton: {
+        padding: 8,
+        marginLeft: -8,
+    },
+    largeInput: {
+        fontSize: 32,
+        fontWeight: '700',
+        color: '#0F172A',
+        lineHeight: 40,
+        flex: 1, // Take remaining space
+    },
+    sendButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#2563EB',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sendButtonDisabled: {
+        backgroundColor: '#E2E8F0',
     },
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 60,
+        paddingTop: 80,
     },
     emptyText: {
         marginTop: 16,
         fontSize: 16,
-        color: '#9CA3AF',
-    }
+        color: '#94A3B8',
+        fontWeight: '500',
+    },
 });

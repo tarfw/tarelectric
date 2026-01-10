@@ -1,5 +1,5 @@
 import '../../src/utils/polyfill'
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   TextInput,
   ActivityIndicator,
+  DeviceEventEmitter,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -29,10 +30,20 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
 
+  const searchInputRef = useRef<TextInput>(null)
+
   // Start Sync Services
   useEffect(() => {
     electricSync.start()
     return () => electricSync.stop()
+  }, [])
+
+  // Listen for TabBar search trigger
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('TRIGGER_SEARCH_ACTION', () => {
+      searchInputRef.current?.focus()
+    })
+    return () => sub.remove()
   }, [])
 
   // 1. Load All Items (Default)
@@ -121,6 +132,7 @@ export default function HomeScreen() {
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search memories..."
             placeholderTextColor="#6B7280"
@@ -256,7 +268,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 24,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   card: {
     backgroundColor: '#FFFFFF',
