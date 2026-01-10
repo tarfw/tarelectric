@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { AuthProvider, useAuth } from '../src/context/AuthContext'
 import { View, ActivityIndicator } from 'react-native'
 
+
 function RootLayoutNav() {
   const { session, loading } = useAuth()
   const segments = useSegments()
@@ -31,7 +32,11 @@ function RootLayoutNav() {
 
   return (
     <SafeAreaProvider>
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerShadowVisible: false,
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="add-memory"
@@ -63,8 +68,6 @@ import { Platform } from 'react-native'
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setPositionAsync('absolute')
-      NavigationBar.setBackgroundColorAsync('#ffffff00')
       NavigationBar.setButtonStyleAsync('dark') // icons color
     }
   }, [])

@@ -58,6 +58,7 @@ export default function HomeScreen() {
       // Get similar IDs from Vector Store
       const searchResults = await vectorStore.search(text, 10) // Top 10
       const ids = searchResults.map(r => r.id)
+      const distanceMap = new Map(searchResults.map(r => [r.id, r.distance]))
 
       if (ids.length === 0) {
         setItems([]) // No matches
@@ -66,10 +67,17 @@ export default function HomeScreen() {
         // Note: Drizzle's `inArray` might need non-empty array
         const dbItems = await db.select().from(OR).where(inArray(OR.id, ids))
 
-        // Sort by relevance (order of IDs in searchResults)
-        const sortedItems = dbItems.sort((a, b) => {
-          return ids.indexOf(a.id) - ids.indexOf(b.id)
-        })
+        // Attach distance AND Sort by distance (ASC)
+        const sortedItems = dbItems
+          .map(item => ({
+            ...item,
+            distance: distanceMap.get(item.id) // Attach distance
+          }))
+          .sort((a, b) => {
+            const distA = a.distance ?? Number.MAX_VALUE;
+            const distB = b.distance ?? Number.MAX_VALUE;
+            return distA - distB; // Ascending: Lower distance = Closer match
+          });
 
         setItems(sortedItems)
       }
@@ -149,16 +157,31 @@ export default function HomeScreen() {
             } catch (e) { content = String(item.payload) }
 
             return (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
-                  <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
-                    <Text style={styles.badgeText}>{item.status}</Text>
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/memory/${item.id}`)}
+              >
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {item.distance !== undefined && (
+                        <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
+                          <Text style={[styles.badgeText, { color: '#1E40AF' }]}>
+                            dist: {Number(item.distance).toFixed(4)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
+                        <Text style={styles.badgeText}>{item.status}</Text>
+                      </View>
+                    </View>
                   </View>
+                  <Text style={styles.cardBody}>{content}</Text>
+                  <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
                 </View>
-                <Text style={styles.cardBody}>{content}</Text>
-                <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
-              </View>
+              </TouchableOpacity>
             )
           })}
           {items.length === 0 && (
