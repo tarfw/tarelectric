@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router'
+import { DeviceEventEmitter } from 'react-native'
 import { TabBar } from '../../src/components/TabBar'
 
 export default function TabLayout() {

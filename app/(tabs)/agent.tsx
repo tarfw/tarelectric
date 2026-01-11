@@ -1,10 +1,43 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Simple ID generator
 const generateId = () => Math.random().toString(36).substring(7);
+
+// Happy Bouncing Icon Component
+const HappyIcon = () => {
+    const translateY = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        const float = Animated.sequence([
+            Animated.timing(translateY, {
+                toValue: -15,
+                duration: 1000,
+                useNativeDriver: true,
+                easing: Easing.inOut(Easing.ease),
+            }),
+            Animated.timing(translateY, {
+                toValue: 0,
+                duration: 1000,
+                useNativeDriver: true,
+                easing: Easing.inOut(Easing.ease),
+            })
+        ]);
+
+        const loop = Animated.loop(float);
+        loop.start();
+
+        return () => loop.stop();
+    }, []);
+
+    return (
+        <Animated.View style={{ transform: [{ translateY }] }}>
+            <Ionicons name="happy-outline" size={72} color="#0F172A" />
+        </Animated.View>
+    );
+};
 
 interface Message {
     id: string;
@@ -124,11 +157,11 @@ export default function AgentScreen() {
                 data={messages}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
-                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80, flexGrow: 1 }]}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                        <Ionicons name="chatbubble-ellipses-outline" size={48} color="#E2E8F0" />
-                        <Text style={styles.emptyText}>Tap center button to ask something...</Text>
+                        <HappyIcon />
+                        <Text style={styles.emptyText}>Hi !</Text>
                     </View>
                 }
             />
@@ -254,15 +287,17 @@ const styles = StyleSheet.create({
         color: '#1E293B',
     },
     emptyContainer: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 100,
+        // paddingTop removed to allow true vertical centering
     },
     emptyText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: '#94A3B8',
-        fontWeight: '500',
+        marginTop: 24,
+        fontSize: 32, // Large greeting
+        color: '#0F172A',
+        fontWeight: '300', // Minimalist thin font
+        letterSpacing: 1,
     },
     loadingBar: {
         position: 'absolute',

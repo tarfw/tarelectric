@@ -13,7 +13,12 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
 
     const onSearchPress = () => {
-        DeviceEventEmitter.emit('TRIGGER_SEARCH_ACTION');
+        const currentRouteName = state.routes[state.index].name;
+        if (currentRouteName === 'relay') {
+            DeviceEventEmitter.emit('TRIGGER_RELAY_SEARCH');
+        } else {
+            DeviceEventEmitter.emit('TRIGGER_SEARCH_ACTION');
+        }
     };
 
     return (
