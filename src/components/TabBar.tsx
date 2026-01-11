@@ -5,7 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android') {
     if (UIManager.setLayoutAnimationEnabledExperimental) {
-        UIManager.setLayoutAnimationEnabledExperimental(true);
+        // @ts-ignore: global.nativeFabricUIManager is not typed but exists in New Arch
+        if (!global.nativeFabricUIManager) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
     }
 }
 
