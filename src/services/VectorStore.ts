@@ -1,113 +1,111 @@
-import { opsqlite } from '../db/client';
-import { embeddingService } from './EmbeddingService';
+import { open } from '@op-engineering/op-sqlite';
+
+const DB_NAME = 'vectors.sqlite';
 
 export class VectorStore {
-    private static instance: VectorStore;
-    private initialized = false;
+    private db: any;
+    private ready: Promise<void>;
 
-    private initPromise: Promise<void> | null = null;
-
-    constructor() { }
-
-    static getInstance(): VectorStore {
-        if (!VectorStore.instance) {
-            VectorStore.instance = new VectorStore();
-        }
-        return VectorStore.instance;
+    constructor() {
+        this.ready = this.init();
     }
 
-    async init() {
-        if (this.initialized) return;
-        if (this.initPromise) return this.initPromise;
+    private async init() {
+        try {
+            this.db = open({ name: DB_NAME });
 
-        this.initPromise = (async () => {
-            try {
-                // vec0 is the virtual table module provided by sqlite-vec
-                // We store: rowid (implicit), id (data reference), embedding
-                const createTableQuery = `
-            CREATE VIRTUAL TABLE IF NOT EXISTS vectors USING vec0(
-              id TEXT PRIMARY KEY,
-              embedding FLOAT[384]
+            await this.db.executeAsync(`
+        CREATE TABLE IF NOT EXISTS vector_store (
+          doc_id TEXT PRIMARY KEY,
+          vector TEXT NOT NULL,
+          content TEXT,
+          metadata TEXT
+        );
+      `);
+
+            // console.log('Vector table initialized');
+        } catch (e) {
+            console.error('Failed to init vector db', e);
+        }
+    }
+
+    async addDocument(docId: string, vector: number[], content: string, metadata?: any) {
+        await this.ready;
+        try {
+            const vectorJson = JSON.stringify(vector);
+            const metaJson = metadata ? JSON.stringify(metadata) : null;
+
+            // Check if exists
+            const existing = await this.db.executeAsync(
+                'SELECT doc_id FROM vector_store WHERE doc_id = ?',
+                [docId]
             );
-          `;
 
-                await opsqlite.execute(createTableQuery);
-                console.log('Vector table initialized');
-                this.initialized = true;
-            } catch (e) {
-                console.error('Failed to initialize vector table', e);
-                this.initPromise = null;
-                throw e;
+            const isInsert = existing.rows?._array?.length === 0;
+
+            if (isInsert) {
+                await this.db.executeAsync(
+                    'INSERT INTO vector_store (doc_id, vector, content, metadata) VALUES (?, ?, ?, ?)',
+                    [docId, vectorJson, content, metaJson]
+                );
+                // console.log(`Stored vector for doc ${docId}`);
+            } else {
+                await this.db.executeAsync(
+                    'UPDATE vector_store SET vector = ?, content = ?, metadata = ? WHERE doc_id = ?',
+                    [vectorJson, content, metaJson, docId]
+                );
+                // console.log(`Updated vector for doc ${docId}`);
             }
-        })();
 
-        return this.initPromise;
-    }
-
-    async addDocument(id: string, text: string) {
-        if (!this.initialized) await this.init();
-
-        const vector = await embeddingService.embed(text);
-
-        // sqlite-vec expects raw float arrays (often serialization is handled by bindings, 
-        // but op-sqlite with sqliteVec extension might expect just the array or a blob)
-        // op-sqlite usually handles array -> blob or similar if configured?
-        // Actually sqlite-vec inserts are standard INSERT INTO vectors(id, embedding) VALUES (...)
-        // We passing the array directly.
-
-        // Note: Parameter binding for arrays in op-sqlite needs verification. 
-        // If it fails, might need to serialize to Float32Array or Buffer.
-
-        try {
-            // Manual UPSERT: Delete first then Insert
-            // "INSERT OR REPLACE" can trigger unique constraint errors on some virtual tables
-            // Sequential execution to avoid missing transaction API issues
-            await opsqlite.execute('DELETE FROM vectors WHERE id = ?', [id]);
-            await opsqlite.execute(
-                'INSERT INTO vectors(id, embedding) VALUES (?, ?)',
-                [id, new Float32Array(vector)]
-            );
-            console.log(`Stored vector for doc ${id.slice(0, 8)}`);
         } catch (e) {
-            console.error('Error adding document to vector store', e);
+            console.error('Vector Store Add Error', e);
         }
     }
 
-    async deleteDocument(id: string) {
-        if (!this.initialized) await this.init();
-
+    async deleteDocument(docId: string) {
+        await this.ready;
         try {
-            opsqlite.execute('DELETE FROM vectors WHERE id = ?', [id]);
+            await this.db.executeAsync(
+                'DELETE FROM vector_store WHERE doc_id = ?',
+                [docId]
+            );
         } catch (e) {
-            console.error('Error deleting document from vector store', e);
+            console.error('Vector Store Delete Error', e);
         }
     }
 
-    async search(query: string, limit: number = 5): Promise<any[]> {
-        if (!this.initialized) await this.init();
-
-        const vector = await embeddingService.embed(query);
-
+    async search(queryVector: number[], limit = 5) {
+        await this.ready;
         try {
-            // KNN search using sqlite-vec
-            const results = await opsqlite.execute(
-                `
-            SELECT
-              id,
-              distance
-            FROM vectors
-            WHERE embedding MATCH ?
-            ORDER BY distance
-            LIMIT ?
-            `,
-                [new Float32Array(vector), limit]
-            );
-            return results.rows || [];
+            const allDocs = await this.db.executeAsync('SELECT * FROM vector_store');
+
+            if (!allDocs.rows?._array) return [];
+
+            const scored = allDocs.rows._array.map((row: any) => {
+                const vec = JSON.parse(row.vector);
+                const score = this.cosineSimilarity(queryVector, vec);
+                return { ...row, score };
+            });
+
+            return scored.sort((a: any, b: any) => b.score - a.score).slice(0, limit);
+
         } catch (e) {
-            console.error('Error searching vector store', e);
+            console.error('Vector Search Error', e);
             return [];
         }
     }
+
+    private cosineSimilarity(a: number[], b: number[]) {
+        let dot = 0;
+        let normA = 0;
+        let normB = 0;
+        for (let i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
 }
 
-export const vectorStore = VectorStore.getInstance();
+export const vectorStore = new VectorStore();

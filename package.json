@@ -10,15 +10,18 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "api": "tsx api/index.ts"
+    "api": "tsx api/index.ts",
+    "api:hono": "tsx api/index_hono.ts"
   },
   "op-sqlite": {
     "sqliteVec": true
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.7",
     "@atproto/api": "^0.18.13",
     "@electric-sql/client": "1.0.7",
     "@expo/metro-runtime": "~6.1.2",
+    "@hono/node-server": "^1.19.8",
     "@libsql/client": "^0.17.0",
     "@op-engineering/op-sqlite": "^15.2.2",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -28,6 +31,7 @@
     "@tanstack/react-db": "^0.0.27",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "ai": "^6.0.27",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.44.3",
@@ -41,6 +45,7 @@
     "expo-router": "~6.0.21",
     "expo-status-bar": "~3.0.9",
     "express": "^5.1.0",
+    "hono": "^4.11.3",
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
     "react": "19.1.0",

@@ -1,136 +1,147 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, StyleSheet, View, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, StatusBar, DeviceEventEmitter } from 'react-native';
-import { tursoService } from '../../src/services/TursoService';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Simple ID generator
+const generateId = () => Math.random().toString(36).substring(7);
+
+interface Message {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 export default function AgentScreen() {
-    const [searchText, setSearchText] = useState('');
-    const [results, setResults] = useState<any[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [adding, setAdding] = useState(false);
     const [isInputMode, setIsInputMode] = useState(false);
+    const flatListRef = useRef<FlatList>(null);
     const inputRef = useRef<TextInput>(null);
+    const insets = useSafeAreaInsets();
 
-    // Initial load & Event Listener
-    React.useEffect(() => {
-        loadRecent();
-
+    // Listen for Tab Bar Trigger
+    useEffect(() => {
         const sub = DeviceEventEmitter.addListener('TRIGGER_SEARCH_ACTION', () => {
             setIsInputMode(true);
             setTimeout(() => {
                 inputRef.current?.focus();
             }, 100);
         });
-
         return () => sub.remove();
     }, []);
 
-    const loadRecent = async () => {
-        setLoading(true);
-        try {
-            const hits = await tursoService.list(50);
-            setResults(hits);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
+    // Auto-scroll to bottom
+    useEffect(() => {
+        if (messages.length > 0) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
         }
-    };
+    }, [messages]);
 
-    const handleSearch = async () => {
-        if (!searchText.trim()) {
+    const handleSend = async () => {
+        if (!input.trim()) {
             setIsInputMode(false);
             return;
         }
-        setLoading(true);
-        try {
-            const hits = await tursoService.search(searchText);
-            setResults(hits);
-            setIsInputMode(false);
-            setSearchText('');
-        } catch (e) {
-            console.error(e);
-            Alert.alert('Error', 'Failed to search memories');
-        } finally {
-            setLoading(false);
-        }
-    };
 
-    const handleAddTestMemory = async () => {
-        if (!searchText.trim()) {
-            Alert.alert('Empty', 'Type something to add.');
-            return;
-        }
-        setAdding(true);
+        const userMsg: Message = { id: generateId(), role: 'user', content: input };
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setIsInputMode(false); // Close overlay immediately
+        setLoading(true);
+
         try {
-            await tursoService.addMemory({
-                title: 'Note',
-                content: searchText,
-                type: 1
+            // Cloudflare Worker Production URL
+            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tar-agent.tar-54d.workers.dev/api/chat';
+            console.log('[AgentScreen] Sending request to:', API_URL);
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+                })
             });
-            setSearchText('');
-            loadRecent();
+
+            console.log('[AgentScreen] Response Status:', response.status);
+
+            if (!response.ok) {
+                const errText = await response.text();
+                console.error('[AgentScreen] Error response:', errText);
+                throw new Error('Network response was not ok: ' + response.status);
+            }
+
+            const text = await response.text();
+            console.log('[AgentScreen] Received response text length:', text.length);
+
+            const assistantMsg: Message = { id: generateId(), role: 'assistant', content: text };
+            setMessages(prev => [...prev, assistantMsg]);
+
         } catch (e) {
-            console.error(e);
-            Alert.alert('Error', 'Failed to add memory');
+            console.error('[AgentScreen] Fetch Error:', e);
+            // @ts-ignore
+            const errorMsg: Message = { id: generateId(), role: 'assistant', content: `Connection error: ${e.message || 'Unknown error'}` };
+            setMessages(prev => [...prev, errorMsg]);
         } finally {
-            setAdding(false);
+            setLoading(false);
         }
     };
 
-    const renderItem = ({ item }: { item: any }) => (
-        <View style={styles.itemContainer}>
-            <View style={styles.itemHeader}>
-                <Text style={styles.itemDate}>
-                    {item.created_at ? new Date(item.created_at * 1000).toLocaleDateString() : 'Just now'}
-                </Text>
-                {item.distance !== undefined && (
-                    <View style={styles.matchBadge}>
-                        <Text style={styles.matchText}>{((1 - item.distance) * 100).toFixed(0)}% Match</Text>
+    const renderItem = ({ item }: { item: Message }) => {
+        const isUser = item.role === 'user';
+        return (
+            <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAssistant]}>
+                {!isUser && (
+                    <View style={styles.avatar}>
+                        <Ionicons name="sparkles" size={16} color="#FFFFFF" />
                     </View>
                 )}
+                <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
+                    <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
+                        {item.content}
+                    </Text>
+                </View>
             </View>
-            <Text style={styles.itemContent}>{item.content}</Text>
-        </View>
-    );
-
-    const insets = useSafeAreaInsets();
-    // TabBar height approx 64 + 20 (padding) + insets.bottom
-    const tabBarHeight = 64 + 20 + insets.bottom;
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar barStyle="dark-content" />
-
-            {/* Header */}
             <View style={styles.header}>
-                <View>
-                    <Text style={styles.headerTitle}>Agent</Text>
-                    <Text style={styles.headerSubtitle}>{results.length} memories active</Text>
+                <Text style={styles.headerTitle}>Agent</Text>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity onPress={() => setMessages([])} style={styles.iconBtn}>
+                        <Ionicons name="trash-outline" size={20} color="#64748B" />
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={loadRecent} style={styles.refreshBtn}>
-                    <Ionicons name="refresh-outline" size={20} color="#64748B" />
-                </TouchableOpacity>
             </View>
 
-            {/* Main Content */}
             <FlatList
-                data={results}
-                keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                ref={flatListRef}
+                data={messages}
+                keyExtractor={item => item.id}
                 renderItem={renderItem}
-                contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 20 }]}
-                showsVerticalScrollIndicator={false}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                        <Ionicons name="sparkles-outline" size={48} color="#E2E8F0" />
-                        <Text style={styles.emptyText}>Ask me anything or save a memory...</Text>
+                        <Ionicons name="chatbubble-ellipses-outline" size={48} color="#E2E8F0" />
+                        <Text style={styles.emptyText}>Tap center button to ask something...</Text>
                     </View>
                 }
             />
 
-            {/* Full Screen Notion-Like Input Overlay */}
+            {/* Loading Indicator when bot is thinking (and overlay is closed) */}
+            {loading && (
+                <View style={[styles.loadingBar, { bottom: insets.bottom + 20 }]}>
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <Text style={styles.loadingText}>Agent is thinking...</Text>
+                </View>
+            )}
+
+            {/* Full Screen Input Overlay */}
             {isInputMode && (
                 <View style={[styles.inputOverlay, { paddingTop: insets.top + 20 }]}>
                     <View style={styles.inputHeader}>
@@ -139,31 +150,23 @@ export default function AgentScreen() {
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                            onPress={handleSearch}
-                            disabled={loading || searchText.trim().length === 0}
-                            style={[
-                                styles.sendButton,
-                                (loading || searchText.trim().length === 0) && styles.sendButtonDisabled
-                            ]}
+                            onPress={handleSend}
+                            disabled={loading || !input.trim()}
+                            style={[styles.sendButtonOverlay, (!input.trim()) && styles.sendButtonDisabled]}
                         >
-                            {loading ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
-                            )}
+                            <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
                         </TouchableOpacity>
                     </View>
 
                     <TextInput
                         ref={inputRef}
                         style={styles.largeInput}
-                        placeholder="What's on your mind?"
+                        placeholder="What can I do for you?"
                         placeholderTextColor="#CBD5E1"
-                        value={searchText}
-                        onChangeText={setSearchText}
+                        value={input}
+                        onChangeText={setInput}
                         multiline
-                        maxLength={1000}
-                        textAlignVertical="top"
+                        maxLength={500}
                     />
                 </View>
             )}
@@ -174,79 +177,118 @@ export default function AgentScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#FFFFFF', // Pure White
     },
     header: {
-        paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: 16,
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        justifyContent: 'space-between',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
+        backgroundColor: '#FFFFFF',
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 24,
         fontWeight: '800',
-        color: '#0F172A', // Slate 900
+        color: '#0F172A',
         letterSpacing: -0.5,
     },
-    headerSubtitle: {
-        fontSize: 13,
-        color: '#64748B', // Slate 500
-        fontWeight: '500',
-        marginTop: 2,
+    headerActions: {
+        flexDirection: 'row',
     },
-    refreshBtn: {
+    iconBtn: {
         padding: 8,
-        backgroundColor: '#F1F5F9',
-        borderRadius: 20,
+        marginLeft: 8,
     },
     listContent: {
         paddingHorizontal: 24,
-        paddingTop: 20,
+        paddingTop: 24,
     },
-    itemContainer: {
-        paddingVertical: 12,
-    },
-    itemHeader: {
+    msgRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        marginBottom: 20,
+        alignItems: 'flex-start',
+    },
+    msgRowUser: {
+        justifyContent: 'flex-end',
+    },
+    msgRowAssistant: {
+        justifyContent: 'flex-start',
+    },
+    avatar: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#3B82F6',
         alignItems: 'center',
-        marginBottom: 6,
+        justifyContent: 'center',
+        marginRight: 10,
+        marginTop: 4,
     },
-    itemDate: {
-        fontSize: 11,
+    bubble: {
+        maxWidth: '85%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 16,
+    },
+    bubbleUser: {
+        backgroundColor: '#3B82F6',
+        borderBottomRightRadius: 4,
+    },
+    bubbleAssistant: {
+        backgroundColor: '#F8FAFC',
+        borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    msgText: {
+        fontSize: 16,
+        lineHeight: 24,
+    },
+    msgTextUser: {
+        color: '#FFFFFF',
+    },
+    msgTextAssistant: {
+        color: '#1E293B',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 100,
+    },
+    emptyText: {
+        marginTop: 16,
+        fontSize: 16,
         color: '#94A3B8',
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
+        fontWeight: '500',
     },
-    matchBadge: {
-        backgroundColor: '#F1F5F9',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 12,
+    loadingBar: {
+        position: 'absolute',
+        left: 24,
+        right: 24,
+        height: 48,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
     },
-    matchText: {
-        fontSize: 10,
+    loadingText: {
+        marginLeft: 10,
         color: '#64748B',
-        fontWeight: '600',
-    },
-    itemContent: {
-        fontSize: 15,
-        color: '#1E293B', // Slate 800
-        lineHeight: 22,
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#E2E8F0', // Slate 200
-        marginVertical: 4,
+        fontWeight: '500',
     },
 
-    // Notion-Like Input Overlay Styles
+    // Full Screen Overlay
     inputOverlay: {
         position: 'absolute',
         top: 0,
@@ -254,14 +296,14 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         backgroundColor: '#FFFFFF',
-        zIndex: 1000, // Cover everything
+        zIndex: 1000,
         paddingHorizontal: 24,
     },
     inputHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
     },
     closeButton: {
         padding: 8,
@@ -271,29 +313,19 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: '700',
         color: '#0F172A',
-        lineHeight: 40,
-        flex: 1, // Take remaining space
+        lineHeight: 42,
+        flex: 1,
+        textAlignVertical: 'top',
     },
-    sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+    sendButtonOverlay: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: '#2563EB',
         alignItems: 'center',
         justifyContent: 'center',
     },
     sendButtonDisabled: {
         backgroundColor: '#E2E8F0',
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingTop: 80,
-    },
-    emptyText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: '#94A3B8',
-        fontWeight: '500',
-    },
+    }
 });

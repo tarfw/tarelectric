@@ -15,7 +15,7 @@ export class EmbeddingService {
 
         this.initPromise = (async () => {
             try {
-                console.log('Initializing EmbeddingService...');
+                // console.log('Initializing EmbeddingService...');
 
                 if (!TextEmbeddingsModule) {
                     throw new Error('TextEmbeddingsModule is undefined. Check import from react-native-executorch.');
@@ -39,18 +39,10 @@ export class EmbeddingService {
                 const cleanModelPath = modelPath.replace(/^file:\/\//, '');
                 const cleanTokenizerPath = tokenizerPath.replace(/^file:\/\//, '');
 
-                console.log('Model loaded at:', cleanModelPath);
-                console.log('Tokenizer written to:', cleanTokenizerPath);
+                // console.log('Model loaded at:', cleanModelPath);
+                // console.log('Tokenizer written to:', cleanTokenizerPath);
 
                 // Initialize using the library's intended load() method.
-                // We pass 'file://' URIs (or paths depending on library logic)
-                // The library expects objects with 'uri' for remote, but for local ...
-                // The Type definition says string | number | object.
-                // Looking at ResourceFetcher, if we provide an object with uri: 'file://...', it might work.
-                // Or just the path string.
-                // Let's rely on the file system paths we prepared.
-                // We need to pass an object with { modelSource, tokenizerSource }
-
                 this.module = new TextEmbeddingsModule();
 
                 await this.module.load({
@@ -59,7 +51,7 @@ export class EmbeddingService {
                 });
 
                 this.hasInitialized = true;
-                console.log('EmbeddingService ready');
+                // console.log('EmbeddingService ready');
             } catch (e) {
                 console.error('Failed to initialize EmbeddingService', e);
                 this.initPromise = null;
@@ -95,7 +87,7 @@ export class EmbeddingService {
                     // Not valid JSON, just use raw text
                 }
 
-                console.log(`Generating embedding for text: "${textToEmbed.slice(0, 50)}..."`);
+                // console.log(`Generating embedding for text: "${textToEmbed.slice(0, 50)}..."`);
 
                 // Execute inference using forward (native method)
                 const result = await this.module.forward(textToEmbed);
@@ -103,7 +95,7 @@ export class EmbeddingService {
                 if (result) {
                     // Convert to JS array
                     const vector = Array.from(result) as number[];
-                    console.log(`Generated vector (dim: ${vector.length})`);
+                    // console.log(`Generated vector (dim: ${vector.length})`);
                     return vector;
                 } else {
                     console.warn('Warning: Result vector is empty/undefined', result);
