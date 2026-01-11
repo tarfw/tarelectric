@@ -17,8 +17,15 @@ envContent.split('\n').forEach(line => {
     if (!line || line.startsWith('#')) return;
     const parts = line.split('=');
     const key = parts[0];
+
     // Join the rest in case value has =
-    const value = parts.slice(1).join('=');
+    let value = parts.slice(1).join('=');
+
+    // SANITIZATION: Strip quotes and whitespace
+    if (value) {
+        value = value.trim().replace(/^['"]|['"]$/g, '');
+    }
+
     if (key && value) {
         secrets[key] = value;
     }
@@ -28,7 +35,8 @@ const TARGET_SECRETS = [
     'DATABASE_URL',
     'LLM_API_KEY',
     'TURSO_DB_URL',
-    'TURSO_AUTH_TOKEN'
+    'TURSO_AUTH_TOKEN',
+    'LLM_MODEL' // Added LLM_MODEL to sync list
 ];
 
 console.log('Deploying secrets to Cloudflare...');

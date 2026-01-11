@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateText, streamText, tool } from 'ai';
+import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { tursoServerService } from './services/turso';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -9,27 +9,34 @@ import { randomUUID } from 'crypto';
 
 // Setup Database Connection (Postgres) for Working Memory
 const connectionString = process.env.DATABASE_URL || '';
-// Note: In Hono/Edge, we might need a different driver, but for "npm run api:hono" (Node), this is fine.
 const client = postgres(connectionString);
 const db = drizzle(client);
 
-// Setup LLM Provider (Groq / generic OpenAI compatible)
-const openai = createOpenAI({
-    baseURL: process.env.LLM_BASE_URL || 'https://api.groq.com/openai/v1',
-    apiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
-});
+// HARDCODED CONFIGURATION (Safety Layer)
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+const GROQ_MODEL_ID = 'llama-3.1-8b-instant';
 
-const model = openai(process.env.LLM_MODEL || 'llama3-70b-8192');
-
-export const agentHandler = async (req: Request) => {
+// Updated Signature: accepts env
+export const agentHandler = async (req: Request, env: any) => {
     try {
-        // Cast to any to avoid type issues with different AI SDK versions
         const body = await req.json() as any;
         const { messages } = body;
 
-        const result = await streamText({
+        // NATIVE ENV LOADING
+        const apiKey = env.LLM_API_KEY || env.OPENAI_API_KEY || '';
+
+        const openai = createOpenAI({
+            baseURL: GROQ_BASE_URL,
+            apiKey: apiKey,
+        });
+
+        const model = openai(GROQ_MODEL_ID);
+
+        // NON-STREAMING (generateText)
+        const result = await generateText({
             model,
             messages,
+            maxSteps: 5,
             system: `You are an intelligent Assistant for a Super App.
       1. Your goal is to help users Book Services, Buy Products, or Manage Tasks.
       2. You have access to "Long Memory" (Turso) to find IDs of drivers, products, etc.
@@ -43,7 +50,22 @@ export const agentHandler = async (req: Request) => {
       
       Start by SEARCHING memory if you need specific IDs.
       Then EXECUTE the opcode.
-      Always confirm to the user what you did.`,
+
+      IMPORTANT:
+      - You MUST output text to explain what you are doing.
+      - Do NOT call a tool without first sending a text message explanation.
+      - Always confirm to the user what you did.
+
+      TOOL USAGE EXAMPLES:
+      1. Searching:
+      call searchMemory({ query: "taxi driver" })
+
+      2. Executing (Strict JSON format):
+      call executeOpcode({ 
+        "opcode": 301, 
+        "payload": { "title": "Book Taxi", "type": "transport" } 
+      })
+      DO NOT use "Opcode" or "params". Use "opcode" and "payload".`,
             tools: {
                 searchMemory: tool({
                     description: 'Search long-term memory for drivers, products, services, or history.',
@@ -51,6 +73,7 @@ export const agentHandler = async (req: Request) => {
                         query: z.string().describe('The search query (e.g., "taxi drivers", "iphone price")'),
                     }),
                     execute: async ({ query }) => {
+                        console.log('Tool Call: searchMemory', query);
                         const results = await tursoServerService.listByTopic(query);
                         return JSON.stringify(results);
                     },
@@ -63,6 +86,7 @@ export const agentHandler = async (req: Request) => {
                         streamId: z.string().optional().describe('Unique ID for this stream/process. If null, a new one is generated.'),
                     }),
                     execute: async ({ opcode, payload, streamId }) => {
+                        console.log('Tool Call: executeOpcode', opcode);
                         const id = randomUUID();
                         const sId = streamId || randomUUID();
 
@@ -82,8 +106,16 @@ export const agentHandler = async (req: Request) => {
             },
         });
 
-        // Use toTextStreamResponse which is more widely supported in older/current versions
-        return result.toTextStreamResponse();
+        // Validated response
+        console.log('Agent Response:', result.text);
+
+        return new Response(result.text, {
+            headers: {
+                'Content-Type': 'text/plain',
+                'Access-Control-Allow-Origin': '*'
+            }
+        });
+
     } catch (error: any) {
         console.error('Agent Error:', error);
         return new Response(JSON.stringify({

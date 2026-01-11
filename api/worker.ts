@@ -6,10 +6,12 @@ const app = new Hono();
 
 app.use('*', cors());
 
-app.get('/', (c) => c.text('Agent is running on Cloudflare Workers!'));
+// Health Check
+app.get('/', (c) => c.text('Agent is running on Cloudflare Workers'));
 
 app.post('/api/chat', async (c) => {
-    return agentHandler(c.req.raw);
+    // PASS ENV EXPLICITLY
+    return agentHandler(c.req.raw, c.env);
 });
 
 export default app;
