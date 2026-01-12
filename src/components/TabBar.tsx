@@ -2,6 +2,7 @@ import { View, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManage
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 if (Platform.OS === 'android') {
     if (UIManager.setLayoutAnimationEnabledExperimental) {
@@ -14,6 +15,9 @@ if (Platform.OS === 'android') {
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
+    const router = useRouter();
+    const currentRouteName = state.routes[state.index].name;
+    const isTasks = currentRouteName === 'tasks';
 
     const onSearchPress = () => {
         const currentRouteName = state.routes[state.index].name;
@@ -54,8 +58,8 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
                     // Determine icon name (Always outline/simple per request)
                     let iconName: keyof typeof Ionicons.glyphMap = 'help';
-                    if (route.name === 'index') iconName = 'ellipse-outline';
-                    if (route.name === 'agent') iconName = 'square-outline';
+                    if (route.name === 'index') iconName = 'square-outline'; // Agent (Main)
+                    if (route.name === 'tasks') iconName = 'ellipse-outline'; // Workspace
                     if (route.name === 'relay') iconName = 'at-outline';
 
                     return (
@@ -82,14 +86,28 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 })}
             </View>
 
-            {/* Separate Search Circle */}
-            <TouchableOpacity
-                style={styles.searchCircle}
-                onPress={onSearchPress}
-                activeOpacity={0.8}
-            >
-                <Ionicons name="search" size={24} color="#0F172A" />
-            </TouchableOpacity>
+            {/* Right Side Actions */}
+            <View style={styles.rightActions}>
+                {/* Search Circle */}
+                <TouchableOpacity
+                    style={styles.actionCircle}
+                    onPress={onSearchPress}
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="search" size={24} color="#0F172A" />
+                </TouchableOpacity>
+
+                {/* Add Memory (Only on Tasks/Workspace) */}
+                {isTasks && (
+                    <TouchableOpacity
+                        style={styles.actionCircle}
+                        onPress={() => router.push('/add-memory')}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="add" size={24} color="#2563EB" />
+                    </TouchableOpacity>
+                )}
+            </View>
         </View>
     );
 }
@@ -106,6 +124,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         backgroundColor: '#FFFFFF', // Solid white background
         paddingTop: 16, // Space above items
+        borderTopWidth: 1,
+        borderTopColor: '#F8FAFC',
     },
     tabPill: {
         flexDirection: 'row',
@@ -132,7 +152,12 @@ const styles = StyleSheet.create({
         borderRadius: 100, // Fully rounded circle
         overflow: 'hidden',
     },
-    searchCircle: {
+    rightActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12, // Space between buttons
+    },
+    actionCircle: {
         width: 56,
         height: 56,
         borderRadius: 28,

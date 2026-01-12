@@ -11,13 +11,13 @@ export default function TabLayout() {
             }}
         >
             <Tabs.Screen
-                name="index"
+                name="tasks"
                 options={{
-                    title: 'Tasks',
+                    title: 'Workspace',
                 }}
             />
             <Tabs.Screen
-                name="agent"
+                name="index"
                 options={{
                     title: 'Agent',
                 }}
