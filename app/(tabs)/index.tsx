@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useState, useRef, useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, DeviceEventEmitter, Animated, Easing } from 'react-native';
@@ -39,10 +40,17 @@ const HappyIcon = () => {
     );
 };
 
-interface Message {
+import { GenUiCard } from '../../src/components/GenUiCard';
+
+type Message = {
     id: string;
     role: 'user' | 'assistant';
     content: string;
+    actionPayload?: {
+        opcode: number;
+        label: string;
+        payload: any;
+    };
 }
 
 export default function AgentScreen() {
@@ -82,41 +90,42 @@ export default function AgentScreen() {
 
         const userMsg: Message = { id: generateId(), role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
+        const currentInput = input;
         setInput('');
         setIsInputMode(false); // Close overlay immediately
         setLoading(true);
 
         try {
-            // Cloudflare Worker Production URL
-            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tar-agent.tar-54d.workers.dev/api/chat';
-            console.log('[AgentScreen] Sending request to:', API_URL);
+            const { aiService } = await import('../../src/services/AiService');
+            const result = await aiService.processInput(currentInput);
 
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-                })
-            });
-
-            console.log('[AgentScreen] Response Status:', response.status);
-
-            if (!response.ok) {
-                const errText = await response.text();
-                console.error('[AgentScreen] Error response:', errText);
-                throw new Error('Network response was not ok: ' + response.status);
+            if (result.type === 'ACTION') {
+                setLoading(false);
+                const actionMsg: Message = {
+                    id: generateId(),
+                    role: 'assistant',
+                    content: '',
+                    actionPayload: {
+                        opcode: result.opcode,
+                        label: result.label,
+                        payload: result.payload
+                    }
+                };
+                setMessages(prev => [...prev, actionMsg]);
+                return;
             }
 
-            const text = await response.text();
-            console.log('[AgentScreen] Received response text length:', text.length);
-
-            const assistantMsg: Message = { id: generateId(), role: 'assistant', content: text };
+            // If CHAT, show reply
+            const assistantMsg: Message = {
+                id: generateId(),
+                role: 'assistant',
+                content: result.reply || "I didn't understand that."
+            };
             setMessages(prev => [...prev, assistantMsg]);
 
         } catch (e) {
-            console.error('[AgentScreen] Fetch Error:', e);
-            // @ts-ignore
-            const errorMsg: Message = { id: generateId(), role: 'assistant', content: `Connection error: ${e.message || 'Unknown error'}` };
+            console.error('[AgentScreen] Error:', e);
+            const errorMsg: Message = { id: generateId(), role: 'assistant', content: "Sorry, I had trouble processing that." };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setLoading(false);
@@ -125,15 +134,41 @@ export default function AgentScreen() {
 
     const renderItem = ({ item }: { item: Message }) => {
         const isUser = item.role === 'user';
+
+        // GenUI Card Render
+        if (item.actionPayload) {
+            return (
+                <View style={{ marginBottom: 16, paddingHorizontal: 8 }}>
+                    <GenUiCard
+                        opcode={item.actionPayload.opcode}
+                        label={item.actionPayload.label}
+                        payload={item.actionPayload.payload}
+                        onSaved={() => {
+                            // Optional: Feedback or remove card? 
+                            // For now, the card itself handles state to show "Saved"
+                        }}
+                    />
+                </View>
+            );
+        }
+
         return (
-            <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAssistant]}>
+            <View style={[
+                styles.msgRow,
+                isUser ? styles.msgRowUser : styles.msgRowAssistant
+            ]}>
                 {!isUser && (
-                    <View style={styles.avatar}>
-                        <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                    </View>
+                    // Avatar Removed as requested
+                    <View style={{ width: 0 }} />
                 )}
-                <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-                    <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
+                <View style={[
+                    styles.bubble,
+                    isUser ? styles.bubbleUser : styles.bubbleAssistant
+                ]}>
+                    <Text style={[
+                        styles.msgText,
+                        isUser ? styles.msgTextUser : styles.msgTextAssistant
+                    ]}>
                         {item.content}
                     </Text>
                 </View>
@@ -220,7 +255,6 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
-        backgroundColor: '#FFFFFF',
     },
     headerTitle: {
         fontSize: 24,
@@ -239,10 +273,37 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingTop: 24,
     },
+    inputContainer: {
+        padding: 16,
+        backgroundColor: '#FFFFFF',
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+    },
+    inputWrapper: { // THIS IS THE BOTTOM BAR INPUT
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F3F4F6', // Light Grey
+        borderRadius: 24,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        minHeight: 48,
+    },
+    input: {
+        flex: 1,
+        fontSize: 16,
+        color: '#111827', // Black text
+        maxHeight: 100,
+    },
+    sendBtn: {
+        marginLeft: 8,
+        padding: 8,
+        backgroundColor: '#0F172A', // Black button
+        borderRadius: 99,
+    },
     msgRow: {
         flexDirection: 'row',
-        marginBottom: 20,
-        alignItems: 'flex-start',
+        marginBottom: 16,
+        paddingHorizontal: 16,
     },
     msgRowUser: {
         justifyContent: 'flex-end',
@@ -250,24 +311,19 @@ const styles = StyleSheet.create({
     msgRowAssistant: {
         justifyContent: 'flex-start',
     },
+    // Avatar Removed
     avatar: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: '#3B82F6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 10,
-        marginTop: 4,
+        display: 'none',
     },
     bubble: {
-        maxWidth: '85%',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        maxWidth: '80%',
+        padding: 12,
         borderRadius: 16,
     },
     bubbleUser: {
-        backgroundColor: '#3B82F6',
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
         borderBottomRightRadius: 4,
     },
     bubbleAssistant: {
@@ -281,10 +337,10 @@ const styles = StyleSheet.create({
         lineHeight: 24,
     },
     msgTextUser: {
-        color: '#FFFFFF',
+        color: '#111827', // Black
     },
     msgTextAssistant: {
-        color: '#1E293B',
+        color: '#1F2937',
     },
     emptyContainer: {
         flex: 1,

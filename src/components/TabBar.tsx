@@ -101,7 +101,11 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 {isTasks && (
                     <TouchableOpacity
                         style={styles.actionCircle}
-                        onPress={() => router.push('/select-opcode')}
+                        onPress={() => {
+                            requestAnimationFrame(() => {
+                                router.push('/select-opcode');
+                            });
+                        }}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="add" size={24} color="#2563EB" />

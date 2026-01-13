@@ -18,8 +18,22 @@ import { OR } from '../src/db/schema'
 import { syncService } from '../src/services/SyncService'
 
 export default function AddMemoryScreen() {
-    const { opcode, label } = useLocalSearchParams()
-    const [content, setContent] = useState('')
+    const { opcode, label, draft } = useLocalSearchParams()
+
+    // Parse Draft
+    let initialContent = '';
+    try {
+        if (draft) {
+            const parsed = JSON.parse(String(draft));
+            initialContent = parsed.text || '';
+            // If we had more fields (qty, product), we would set them here 
+            // but currently the form only has 'content'.
+            // So we just use the raw text or formatted text.
+            if (parsed.qty) initialContent += `\nQty: ${parsed.qty}`;
+        }
+    } catch (e) { }
+
+    const [content, setContent] = useState(initialContent)
     const [scope, setScope] = useState('private')
     const [status, setStatus] = useState('active')
     const [loading, setLoading] = useState(false)

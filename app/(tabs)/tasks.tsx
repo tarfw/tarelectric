@@ -166,7 +166,8 @@ export default function HomeScreen() {
             let content = 'Unknown Payload'
             try {
               const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload
-              content = parsed.text || JSON.stringify(parsed)
+              // DEBUG: Show full JSON as requested
+              content = JSON.stringify(parsed, null, 2)
             } catch (e) { content = String(item.payload) }
 
             return (
@@ -177,8 +178,17 @@ export default function HomeScreen() {
               >
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardId}>ID: {item.id.slice(0, 8)}</Text>
+                    <View>
+                      <Text style={styles.streamId}>{item.streamId}</Text>
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {item.delta !== null && item.delta !== undefined && item.delta !== 0 && (
+                        <View style={[styles.badge, { backgroundColor: item.delta > 0 ? '#DCFCE7' : '#FEE2E2' }]}>
+                          <Text style={[styles.badgeText, { color: item.delta > 0 ? '#166534' : '#991B1B' }]}>
+                            {item.delta > 0 ? '+' : ''}{item.delta}
+                          </Text>
+                        </View>
+                      )}
                       {item.distance !== undefined && (
                         <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
                           <Text style={[styles.badgeText, { color: '#1E40AF' }]}>
@@ -293,6 +303,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     color: '#9CA3AF',
+  },
+  streamId: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#6B7280',
+    marginTop: 2,
+    backgroundColor: '#F3F4F6',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
+    borderRadius: 4,
   },
   badge: {
     paddingHorizontal: 8,

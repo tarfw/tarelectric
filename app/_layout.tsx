@@ -55,6 +55,13 @@ function RootLayoutNav() {
             headerBackTitle: 'Back'
           }}
         />
+        <Stack.Screen
+          name="select-opcode"
+          options={{
+            headerShown: false,
+            animation: 'none',
+          }}
+        />
       </Stack>
     </SafeAreaProvider>
   )
