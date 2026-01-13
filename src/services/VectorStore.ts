@@ -13,6 +13,7 @@ export class VectorStore {
     private async init() {
         try {
             this.db = open({ name: DB_NAME });
+            await this.db.executeAsync('PRAGMA journal_mode = WAL;');
 
             await this.db.executeAsync(`
         CREATE TABLE IF NOT EXISTS vector_store (
@@ -56,6 +57,22 @@ export class VectorStore {
             );
         } catch (e) {
             console.error('Vector Store Delete Error', e);
+        }
+    }
+
+    async deleteDocuments(docIds: string[]) {
+        if (!docIds.length) return;
+        await this.ready;
+        try {
+            // Batch delete
+            const placeholders = docIds.map(() => '?').join(',');
+            await this.db.executeAsync(
+                `DELETE FROM vector_store WHERE doc_id IN (${placeholders})`,
+                docIds
+            );
+            console.log(`[VectorStore] Batch deleted ${docIds.length} vectors`);
+        } catch (e) {
+            console.error('Vector Store Batch Delete Error', e);
         }
     }
 

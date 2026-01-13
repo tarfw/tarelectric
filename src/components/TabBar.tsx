@@ -88,13 +88,17 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
             {/* Right Side Actions */}
             <View style={styles.rightActions}>
-                {/* Search Circle */}
+                {/* Search / Audio Action */}
                 <TouchableOpacity
                     style={styles.actionCircle}
                     onPress={onSearchPress}
                     activeOpacity={0.8}
                 >
-                    <Ionicons name="search" size={24} color="#0F172A" />
+                    <Ionicons
+                        name={currentRouteName === 'index' ? "mic-outline" : "search"}
+                        size={24}
+                        color="#0F172A"
+                    />
                 </TouchableOpacity>
 
                 {/* Add Memory (Only on Tasks/Workspace) */}

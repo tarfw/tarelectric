@@ -29,63 +29,62 @@ export class ElectricSync {
 
             // 2. Consume the stream
             this.stream.subscribe(async (messages) => {
+                const vectorDeletes: string[] = [];
+                const vectorUpserts: { id: string, payload: any }[] = [];
+
                 // Use a transaction for batch updates
-                await db.transaction(async (tx) => {
-                    for (const message of messages) {
-                        const { headers, value } = message as any
+                try {
+                    await db.transaction(async (tx) => {
+                        for (const message of messages) {
+                            const { headers, value } = message as any
 
-                        // 1. Handle Control Messages (no value)
-                        if (!value) {
-                            if (headers.control === 'up-to-date') {
-                                // console.log('[ShapeStream] Up to date')
-                            }
-                            continue
-                        }
-
-                        // 2. Handle Data Messages
-                        const row = value
-                        const operation = headers.operation // 'insert' | 'update' | 'delete'
-
-                        try {
-                            // Helper to safely parse dates (handles Postgres +00 offset)
-                            const parseDate = (dateStr: any) => {
-                                if (!dateStr) return new Date()
-                                if (typeof dateStr === 'string' && dateStr.includes('+00') && !dateStr.includes(':00+00')) {
-                                    return new Date(dateStr.replace('+00', 'Z'))
+                            // 1. Handle Control Messages (no value)
+                            if (!value) {
+                                if (headers.control === 'up-to-date') {
+                                    // console.log('[ShapeStream] Up to date')
                                 }
-                                return new Date(dateStr)
+                                continue
                             }
 
-                            if (operation === 'delete') {
-                                await tx.delete(OR).where(eq(OR.id, row.id))
-                                // Clean up vector index asynchronously
-                                vectorStore.deleteDocument(row.id).catch(console.error)
-                            } else if (operation === 'update') {
-                                // For updates, only update the fields that are present
-                                const updates: any = {}
-                                if (row.streamId !== undefined) updates.streamId = row.streamId
-                                if (row.opcode !== undefined) updates.opcode = Number(row.opcode)
-                                if (row.delta !== undefined) updates.delta = Number(row.delta)
-                                if (row.payload !== undefined) updates.payload = typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload)
-                                if (row.scope !== undefined) updates.scope = row.scope
-                                if (row.status !== undefined) updates.status = row.status
-                                if (row.ts !== undefined) updates.ts = parseDate(row.ts)
+                            // 2. Handle Data Messages
+                            const row = value
+                            const operation = headers.operation // 'insert' | 'update' | 'delete'
 
-                                await tx.update(OR).set(updates).where(eq(OR.id, row.id))
-                            } else {
-                                // insert (or upsert to be safe, assuming full row)
-                                await tx.insert(OR).values({
-                                    id: row.id,
-                                    streamId: row.streamId,
-                                    opcode: Number(row.opcode),
-                                    delta: row.delta ? Number(row.delta) : null,
-                                    payload: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
-                                    scope: row.scope,
-                                    status: row.status,
-                                    ts: parseDate(row.ts),
-                                }).onConflictDoUpdate({
-                                    target: OR.id,
-                                    set: {
+                            try {
+                                // Helper to safely parse dates (handles Postgres +00 offset)
+                                const parseDate = (dateStr: any) => {
+                                    if (!dateStr) return new Date()
+                                    if (typeof dateStr === 'string' && dateStr.includes('+00') && !dateStr.includes(':00+00')) {
+                                        return new Date(dateStr.replace('+00', 'Z'))
+                                    }
+                                    return new Date(dateStr)
+                                }
+
+                                if (operation === 'delete') {
+                                    await tx.delete(OR).where(eq(OR.id, row.id))
+                                    vectorDeletes.push(row.id);
+                                } else if (operation === 'update') {
+                                    // For updates, only update the fields that are present
+                                    const updates: any = {}
+                                    if (row.streamId !== undefined) updates.streamId = row.streamId
+                                    if (row.opcode !== undefined) updates.opcode = Number(row.opcode)
+                                    if (row.delta !== undefined) updates.delta = Number(row.delta)
+                                    if (row.payload !== undefined) updates.payload = typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload)
+                                    if (row.scope !== undefined) updates.scope = row.scope
+                                    if (row.status !== undefined) updates.status = row.status
+                                    if (row.ts !== undefined) updates.ts = parseDate(row.ts)
+
+                                    await tx.update(OR).set(updates).where(eq(OR.id, row.id))
+
+                                    // If payload changed, re-embed (simplification: just re-embed if update happens)
+                                    // Optimally check if payload actually is in the update
+                                    if (row.payload) {
+                                        vectorUpserts.push({ id: row.id, payload: row.payload });
+                                    }
+                                } else {
+                                    // insert (or upsert to be safe, assuming full row)
+                                    await tx.insert(OR).values({
+                                        id: row.id,
                                         streamId: row.streamId,
                                         opcode: Number(row.opcode),
                                         delta: row.delta ? Number(row.delta) : null,
@@ -93,29 +92,56 @@ export class ElectricSync {
                                         scope: row.scope,
                                         status: row.status,
                                         ts: parseDate(row.ts),
+                                    }).onConflictDoUpdate({
+                                        target: OR.id,
+                                        set: {
+                                            streamId: row.streamId,
+                                            opcode: Number(row.opcode),
+                                            delta: row.delta ? Number(row.delta) : null,
+                                            payload: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
+                                            scope: row.scope,
+                                            status: row.status,
+                                            ts: parseDate(row.ts),
+                                        }
+                                    })
+
+                                    if (row.payload) {
+                                        vectorUpserts.push({ id: row.id, payload: row.payload });
                                     }
-                                })
+                                }
+                            } catch (err) {
+                                console.error('Failed to sync row', row.id, err)
+                            }
+                        }
+                    })
 
-                                // Index the payload for vector search
-                                // Doing this async to not block the sync transaction
-                                if (row.payload) {
-                                    const textContent = typeof row.payload === 'string'
-                                        ? row.payload
-                                        : JSON.stringify(row.payload);
+                    // Post-transaction Vector Updates
+                    if (vectorDeletes.length > 0) {
+                        vectorStore.deleteDocuments(vectorDeletes).catch(e => console.error('Batch delete vectors failed', e));
+                    }
 
-                                    // Generate embedding
-                                    embeddingService.embed(textContent)
-                                        .then((vector: number[]) => {
-                                            vectorStore.addDocument(row.id, vector, textContent).catch(console.error);
-                                        })
-                                        .catch((e: any) => console.error('Failed to generate embedding for sync', e));
+                    // Process Upserts Sequentially to avoid hammering the embedding service/DB
+                    // We can do this in the background
+                    if (vectorUpserts.length > 0) {
+                        (async () => {
+                            for (const item of vectorUpserts) {
+                                try {
+                                    const textContent = typeof item.payload === 'string'
+                                        ? item.payload
+                                        : JSON.stringify(item.payload);
+
+                                    const vector = await embeddingService.embed(textContent);
+                                    await vectorStore.addDocument(item.id, vector, textContent);
+                                } catch (e) {
+                                    console.error('Failed to sync vector for', item.id, e);
                                 }
                             }
-                        } catch (err) {
-                            console.error('Failed to sync row', row.id, err)
-                        }
+                        })();
                     }
-                })
+
+                } catch (txValError) {
+                    console.error('Transaction failed during sync', txValError);
+                }
             })
 
             console.log('Electric Sync Connected')
