@@ -10,17 +10,23 @@ import {
     ScrollView,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams, Stack } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Crypto from 'expo-crypto'
 import { db } from '../src/db/client'
 import { OR } from '../src/db/schema'
 import { syncService } from '../src/services/SyncService'
 
 export default function AddMemoryScreen() {
+    const { opcode, label } = useLocalSearchParams()
     const [content, setContent] = useState('')
     const [scope, setScope] = useState('private')
     const [status, setStatus] = useState('active')
     const [loading, setLoading] = useState(false)
+
+    // Parse opcode to number, default to 1 (Text) if missing
+    const opcodeNum = opcode ? Number(opcode) : 1
+    const opcodeLabel = label ? String(label) : 'Text Note'
 
     const handleSave = async () => {
         if (!content.trim()) {
@@ -33,7 +39,7 @@ export default function AddMemoryScreen() {
             const newMemory = {
                 id: Crypto.randomUUID(),
                 streamId: 'default-stream',
-                opcode: 1, // 1 = text content
+                opcode: opcodeNum,
                 payload: JSON.stringify({ text: content }),
                 scope,
                 status,
@@ -46,7 +52,7 @@ export default function AddMemoryScreen() {
             // 2. Queue for Sync
             await syncService.enqueueMutation('OR', 'INSERT', newMemory)
 
-            router.back()
+            router.dismissAll() // Go back to root/tabs
         } catch (e) {
             console.error('Failed to save memory:', e)
             alert('Failed to save memory')
@@ -57,7 +63,20 @@ export default function AddMemoryScreen() {
 
     return (
         <View style={styles.container}>
-            <StatusBar style="light" />
+            <Stack.Screen options={{ headerShown: false }} />
+            <StatusBar style="dark" />
+
+            {/* Header / Top Bar */}
+            <SafeAreaView edges={['top']} style={styles.headerSafe}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Text style={styles.backButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>{opcodeLabel} ({opcodeNum})</Text>
+                    <View style={{ width: 50 }} />
+                </View>
+            </SafeAreaView>
+
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
                 <View style={styles.formGroup}>
@@ -69,6 +88,7 @@ export default function AddMemoryScreen() {
                         placeholder="What's on your mind?"
                         multiline
                         textAlignVertical="top"
+                        autoFocus
                     />
                 </View>
 
@@ -113,17 +133,20 @@ export default function AddMemoryScreen() {
             </ScrollView>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-                style={styles.footer}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flexShrink: 0 }}
             >
-                <TouchableOpacity
-                    style={[styles.saveButton, loading && styles.disabledButton]}
-                    onPress={handleSave}
-                    disabled={loading}
-                >
-                    <Text style={styles.saveButtonText}>{loading ? 'Saving...' : 'Save Memory'}</Text>
-                </TouchableOpacity>
+                <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
+                    <View style={styles.footer}>
+                        <TouchableOpacity
+                            style={[styles.saveButton, loading && styles.disabledButton]}
+                            onPress={handleSave}
+                            disabled={loading}
+                        >
+                            <Text style={styles.saveButtonText}>{loading ? 'Saving...' : 'Save Memory'}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </SafeAreaView>
             </KeyboardAvoidingView>
         </View>
     )
@@ -133,6 +156,30 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
+    },
+    headerSafe: {
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+    },
+    header: {
+        height: 50,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+    },
+    headerTitle: {
+        color: '#111827',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    backButton: {
+        padding: 8,
+    },
+    backButtonText: {
+        color: '#111827',
+        fontSize: 16,
     },
     scrollContent: {
         padding: 24,
@@ -158,6 +205,7 @@ const styles = StyleSheet.create({
     },
     textArea: {
         height: 150,
+        textAlignVertical: 'top',
     },
     row: {
         flexDirection: 'row',
@@ -195,11 +243,14 @@ const styles = StyleSheet.create({
         color: '#111827',
         fontWeight: '600',
     },
-    footer: {
-        padding: 24,
+    footerSafe: {
+        backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#E5E7EB',
-        backgroundColor: '#fff',
+    },
+    footer: {
+        padding: 16,
+        paddingTop: 12,
     },
     saveButton: {
         backgroundColor: '#2563EB',

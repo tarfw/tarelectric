@@ -115,9 +115,7 @@ export default function HomeScreen() {
     return () => clearInterval(interval)
   }, [searchQuery, loadAllItems])
 
-  const handleAddPress = () => {
-    router.push('/add-memory')
-  }
+
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

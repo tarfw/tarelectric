@@ -101,7 +101,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 {isTasks && (
                     <TouchableOpacity
                         style={styles.actionCircle}
-                        onPress={() => router.push('/add-memory')}
+                        onPress={() => router.push('/select-opcode')}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="add" size={24} color="#2563EB" />
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center', // Center vertically in the bar
         paddingHorizontal: 24,
-        backgroundColor: '#FFFFFF', // Solid white background
+        backgroundColor: '#FAFAFA', // Very light grey background
         paddingTop: 16, // Space above items
         borderTopWidth: 1,
         borderTopColor: '#F8FAFC',
