@@ -35,27 +35,12 @@ export class VectorStore {
             const vectorJson = JSON.stringify(vector);
             const metaJson = metadata ? JSON.stringify(metadata) : null;
 
-            // Check if exists
-            const existing = await this.db.executeAsync(
-                'SELECT doc_id FROM vector_store WHERE doc_id = ?',
-                [docId]
+            // Use INSERT OR REPLACE to avoid issues with existence check
+            await this.db.executeAsync(
+                'INSERT OR REPLACE INTO vector_store (doc_id, vector, content, metadata) VALUES (?, ?, ?, ?)',
+                [docId, vectorJson, content, metaJson]
             );
-
-            const isInsert = existing.rows?._array?.length === 0;
-
-            if (isInsert) {
-                await this.db.executeAsync(
-                    'INSERT INTO vector_store (doc_id, vector, content, metadata) VALUES (?, ?, ?, ?)',
-                    [docId, vectorJson, content, metaJson]
-                );
-                // console.log(`Stored vector for doc ${docId}`);
-            } else {
-                await this.db.executeAsync(
-                    'UPDATE vector_store SET vector = ?, content = ?, metadata = ? WHERE doc_id = ?',
-                    [vectorJson, content, metaJson, docId]
-                );
-                // console.log(`Updated vector for doc ${docId}`);
-            }
+            console.log(`[VectorStore] Upserted vector for doc ${docId} (length: ${vector.length})`);
 
         } catch (e) {
             console.error('Vector Store Add Error', e);
@@ -74,20 +59,46 @@ export class VectorStore {
         }
     }
 
+    async clear() {
+        await this.ready;
+        try {
+            await this.db.executeAsync('DELETE FROM vector_store');
+            console.log('[VectorStore] Cleared all vectors');
+        } catch (e) {
+            console.error('Vector Store Clear Error', e);
+        }
+    }
+
     async search(queryVector: number[], limit = 5) {
         await this.ready;
         try {
             const allDocs = await this.db.executeAsync('SELECT * FROM vector_store');
 
-            if (!allDocs.rows?._array) return [];
+            // Handle different op-sqlite result structures
+            const rows = allDocs.rows?._array || allDocs.rows || [];
 
-            const scored = allDocs.rows._array.map((row: any) => {
-                const vec = JSON.parse(row.vector);
-                const score = this.cosineSimilarity(queryVector, vec);
-                return { ...row, score };
+            if (!rows.length) {
+                console.log('[VectorStore] Search: No rows in vector_store');
+                return [];
+            }
+
+            console.log(`[VectorStore] Search: Scanning ${rows.length} vectors`);
+
+            const scored = rows.map((row: any) => {
+                try {
+                    const vec = JSON.parse(row.vector);
+                    const score = this.cosineSimilarity(queryVector, vec);
+                    // console.log(`[VectorStore] Doc ${row.doc_id} score: ${score}`);
+                    return { ...row, score };
+                } catch (e) {
+                    console.error('Vector Parse Error', e);
+                    return { ...row, score: 0 };
+                }
             });
 
-            return scored.sort((a: any, b: any) => b.score - a.score).slice(0, limit);
+            const top = scored.sort((a: any, b: any) => b.score - a.score).slice(0, limit);
+            console.log(`[VectorStore] Search: Returning top ${top.length} results`);
+            return top;
 
         } catch (e) {
             console.error('Vector Search Error', e);
@@ -105,6 +116,28 @@ export class VectorStore {
             normB += b[i] * b[i];
         }
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    async getStats() {
+        await this.ready;
+        try {
+            // Debug: Check raw count
+            const countResult = await this.db.executeAsync('SELECT COUNT(*) as c FROM vector_store');
+            // Fallback for different result structures (rows might be the array itself)
+            const countRows = countResult.rows?._array || countResult.rows || [];
+            const total = countRows[0]?.c ?? 0;
+
+            // Debug: Check embedded count with simpler logic
+            const embeddedResult = await this.db.executeAsync('SELECT COUNT(*) as c FROM vector_store WHERE vector IS NOT NULL');
+            const embeddedRows = embeddedResult.rows?._array || embeddedResult.rows || [];
+            const embedded = embeddedRows[0]?.c ?? 0;
+
+            // console.log(`[VectorStore] Stats calculated: Total=${total}, Embedded=${embedded}`);
+            return { total, embedded };
+        } catch (e) {
+            console.error('Vector Store Stats Error', e);
+            return { total: 0, embedded: 0 };
+        }
     }
 }
 

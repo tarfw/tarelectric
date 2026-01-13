@@ -15,7 +15,7 @@ export class EmbeddingService {
 
         this.initPromise = (async () => {
             try {
-                // console.log('Initializing EmbeddingService...');
+                console.log('Initializing EmbeddingService...');
 
                 if (!TextEmbeddingsModule) {
                     throw new Error('TextEmbeddingsModule is undefined. Check import from react-native-executorch.');
@@ -39,8 +39,8 @@ export class EmbeddingService {
                 const cleanModelPath = modelPath.replace(/^file:\/\//, '');
                 const cleanTokenizerPath = tokenizerPath.replace(/^file:\/\//, '');
 
-                // console.log('Model loaded at:', cleanModelPath);
-                // console.log('Tokenizer written to:', cleanTokenizerPath);
+                console.log('Model loaded at:', cleanModelPath);
+                console.log('Tokenizer written to:', cleanTokenizerPath);
 
                 // Initialize using the library's intended load() method.
                 this.module = new TextEmbeddingsModule();
@@ -51,7 +51,7 @@ export class EmbeddingService {
                 });
 
                 this.hasInitialized = true;
-                // console.log('EmbeddingService ready');
+                console.log('EmbeddingService ready');
             } catch (e) {
                 console.error('Failed to initialize EmbeddingService', e);
                 this.initPromise = null;
@@ -95,7 +95,7 @@ export class EmbeddingService {
                 if (result) {
                     // Convert to JS array
                     const vector = Array.from(result) as number[];
-                    // console.log(`Generated vector (dim: ${vector.length})`);
+                    console.log(`Generated vector (dim: ${vector.length})`);
                     return vector;
                 } else {
                     console.warn('Warning: Result vector is empty/undefined', result);

@@ -20,6 +20,7 @@ import { db } from '../../src/db/client'
 import { OR } from '../../src/db/schema'
 import { electricSync } from '../../src/services/ShapeStream'
 import { vectorStore } from '../../src/services/VectorStore' // Import VectorStore
+import { embeddingService } from '../../src/services/EmbeddingService' // Import EmbeddingService
 import { desc, inArray } from 'drizzle-orm'
 
 // Initialize DB on start
@@ -27,8 +28,14 @@ initDatabase()
 
 export default function HomeScreen() {
   const [items, setItems] = useState<any[]>([])
+  const [stats, setStats] = useState({ total: 0, embedded: 0 })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
+
+  const updateStats = useCallback(async () => {
+    const s = await vectorStore.getStats()
+    setStats(s)
+  }, [])
 
   const searchInputRef = useRef<TextInput>(null)
 
@@ -51,10 +58,11 @@ export default function HomeScreen() {
     try {
       const results = await db.select().from(OR).orderBy(desc(OR.ts))
       setItems(results)
-    } catch (e) {
+      updateStats()
+    } catch (e: any) {
       console.error('Load Error:', e)
     }
-  }, [])
+  }, [updateStats])
 
   // 2. Perform Vector Search
   const performSearch = useCallback(async (text: string) => {
@@ -66,10 +74,17 @@ export default function HomeScreen() {
 
     setIsSearching(true)
     try {
+      // Generate embedding for query
+      const queryVector = await embeddingService.embed(text)
+
       // Get similar IDs from Vector Store
-      const searchResults = await vectorStore.search(text, 10) // Top 10
-      const ids = searchResults.map(r => r.id)
-      const distanceMap = new Map(searchResults.map(r => [r.id, r.distance]))
+      const searchResults = await vectorStore.search(queryVector, 10) // Top 10
+      console.log(`[UI] Search returned ${searchResults.length} results`);
+
+      const ids = searchResults.map((r: any) => r.doc_id) // Note: key is doc_id not id in vector store?
+      console.log(`[UI] Search IDs:`, ids);
+
+      const distanceMap = new Map(searchResults.map((r: any) => [r.doc_id, r.score])) // Use score as distance/similarity
 
       if (ids.length === 0) {
         setItems([]) // No matches
@@ -77,17 +92,18 @@ export default function HomeScreen() {
         // Fetch full objects from DB for these IDs
         // Note: Drizzle's `inArray` might need non-empty array
         const dbItems = await db.select().from(OR).where(inArray(OR.id, ids))
+        console.log(`[UI] DB matched ${dbItems.length} items from OR table`);
 
-        // Attach distance AND Sort by distance (ASC)
+        // Attach distance AND Sort by distance (DESC) for similarity
         const sortedItems = dbItems
           .map(item => ({
             ...item,
-            distance: distanceMap.get(item.id) // Attach distance
+            distance: Number(distanceMap.get(item.id) ?? 0) // Attach score
           }))
           .sort((a, b) => {
-            const distA = a.distance ?? Number.MAX_VALUE;
-            const distB = b.distance ?? Number.MAX_VALUE;
-            return distA - distB; // Ascending: Lower distance = Closer match
+            const scoreA = a.distance;
+            const scoreB = b.distance;
+            return scoreB - scoreA; // Descending: Higher score = Better match
           });
 
         setItems(sortedItems)
@@ -110,12 +126,54 @@ export default function HomeScreen() {
 
     loadAllItems()
     const interval = setInterval(() => {
-      if (!searchQuery) loadAllItems()
+      if (!searchQuery) {
+        loadAllItems()
+      } else {
+        updateStats()
+      }
     }, 2000)
     return () => clearInterval(interval)
-  }, [searchQuery, loadAllItems])
+  }, [searchQuery, loadAllItems, updateStats])
 
 
+
+  const [isRebuilding, setIsRebuilding] = useState(false)
+
+  const handleRebuildIndex = useCallback(async () => {
+    if (isRebuilding) return
+    setIsRebuilding(true)
+    try {
+      console.log('[UI] Starting Index Rebuild...')
+      await vectorStore.clear()
+      const allItems = await db.select().from(OR)
+      console.log(`[UI] Found ${allItems.length} items to re-index`)
+
+      let count = 0
+      for (const item of allItems) {
+        if (!item.payload) continue
+
+        try {
+          const textContent = typeof item.payload === 'string'
+            ? item.payload
+            : JSON.stringify(item.payload)
+
+          const vector = await embeddingService.embed(textContent)
+          await vectorStore.addDocument(item.id, vector, textContent)
+          count++
+          if (count % 10 === 0) setStats(await vectorStore.getStats())
+        } catch (e) {
+          console.error(`[UI] Failed to re-index item ${item.id}`, e)
+        }
+      }
+
+      console.log(`[UI] Rebuild complete. Processed ${count} items.`)
+      updateStats()
+    } catch (e) {
+      console.error('[UI] Rebuild Failed', e)
+    } finally {
+      setIsRebuilding(false)
+    }
+  }, [updateStats, isRebuilding])
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -125,9 +183,14 @@ export default function HomeScreen() {
         <View style={styles.headerTopRow}>
           <Text style={styles.title}>Workspace</Text>
         </View>
-        <Text style={styles.subtitle}>
-          task memories • {items.length} items • {searchQuery ? 'Semantic Search' : 'Offline Ready'}
-        </Text>
+        <TouchableOpacity onPress={handleRebuildIndex} disabled={isRebuilding}>
+          <Text style={styles.subtitle}>
+            total: {stats.total} • embedded: {stats.embedded} • {
+              isRebuilding ? 'Rebuilding...' :
+                (searchQuery ? 'Semantic Search' : 'Rebuild Index')
+            }
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />

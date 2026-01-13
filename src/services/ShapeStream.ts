@@ -4,6 +4,7 @@ import { db } from '../db/client'
 import { OR } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 import { vectorStore } from './VectorStore'
+import { embeddingService } from './EmbeddingService'
 
 // Config
 const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000'
@@ -102,8 +103,12 @@ export class ElectricSync {
                                         ? row.payload
                                         : JSON.stringify(row.payload);
 
-                                    // Basic heuristic: Index if it looks like content
-                                    vectorStore.addDocument(row.id, textContent).catch(console.error);
+                                    // Generate embedding
+                                    embeddingService.embed(textContent)
+                                        .then((vector: number[]) => {
+                                            vectorStore.addDocument(row.id, vector, textContent).catch(console.error);
+                                        })
+                                        .catch((e: any) => console.error('Failed to generate embedding for sync', e));
                                 }
                             }
                         } catch (err) {

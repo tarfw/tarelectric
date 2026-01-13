@@ -16,6 +16,8 @@ import * as Crypto from 'expo-crypto'
 import { db } from '../src/db/client'
 import { OR } from '../src/db/schema'
 import { syncService } from '../src/services/SyncService'
+import { embeddingService } from '../src/services/EmbeddingService'
+import { vectorStore } from '../src/services/VectorStore'
 
 export default function AddMemoryScreen() {
     const { opcode, label, draft } = useLocalSearchParams()
@@ -63,7 +65,17 @@ export default function AddMemoryScreen() {
             // 1. Write to local DB
             await db.insert(OR).values(newMemory)
 
-            // 2. Queue for Sync
+            // 2. Generate and Store Embedding (Async)
+            // We do this concurrently or await it. Awaiting ensures it's ready for search immediately.
+            try {
+                const vector = await embeddingService.embed(content);
+                await vectorStore.addDocument(newMemory.id, vector, content);
+            } catch (err) {
+                console.error('Failed to generate local embedding:', err);
+                // Don't block save on embedding failure
+            }
+
+            // 3. Queue for Sync
             await syncService.enqueueMutation('OR', 'INSERT', newMemory)
 
             router.dismissAll() // Go back to root/tabs
