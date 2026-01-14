@@ -1,0 +1,41 @@
+{
+    "id": "li_87239102",
+    "quantity": 1,
+    "item": {
+        "id": "prod_sku_123",
+        "identifiers": {
+            "gtin": "0012345678905",
+            "mpn": "RUN-SHOE-V2-BLK",
+            "sku": "prod_sku_123"
+        },
+        "url": "https://mystore.com/products/running-shoe-v2",
+        "title": "Agentic AI Running Shoes",
+        "subtitle": "Limited Edition - Carbon Black",
+        "description": "High-performance running shoes designed for autonomous agents.",
+        "brand": "DeepTech Wear",
+        "images": [
+            {
+                "url": "https://mystore.com/cdn/shoe_v2_main.jpg",
+                "alt_text": "Side view of Agentic AI Shoe"
+            }
+        ],
+        "price": {
+            "value": "120.00",
+            "currency": "USD"
+        },
+        "attributes": [
+            {
+                "name": "Size",
+                "value": "10"
+            },
+            {
+                "name": "Color",
+                "value": "Carbon Black"
+            }
+        ]
+    },
+    "total": {
+        "value": "120.00",
+        "currency": "USD"
+    }
+}

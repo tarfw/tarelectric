@@ -4,12 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { GenUiCard } from '../../src/components/GenUiCard';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android') {
-    if (UIManager.setLayoutAnimationEnabledExperimental) {
-        UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-}
+
 
 type AiResult = {
     type: 'ACTION' | 'CHAT' | 'ERROR';

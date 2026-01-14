@@ -5,14 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-if (Platform.OS === 'android') {
-    if (UIManager.setLayoutAnimationEnabledExperimental) {
-        // @ts-ignore: global.nativeFabricUIManager is not typed but exists in New Arch
-        if (!global.nativeFabricUIManager) {
-            UIManager.setLayoutAnimationEnabledExperimental(true);
-        }
-    }
-}
+
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
