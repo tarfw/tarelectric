@@ -1,11 +1,15 @@
-import { router } from 'expo-router';
 import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, LayoutAnimation, UIManager } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GenUiCard } from '../../src/components/GenUiCard';
 
-
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+}
 
 type AiResult = {
     type: 'ACTION' | 'CHAT' | 'ERROR';
@@ -22,6 +26,12 @@ export default function AgentScreen() {
     const insets = useSafeAreaInsets();
     const inputRef = useRef<TextInput>(null);
 
+    // Constant padding: Always clear TabBar to avoid jumps
+    // The user explicitly requested "same at all states"
+    // Standard padding: Just aesthetic frame padding.
+    // The TabBar is now relative, so it sits below this view.
+    const bottomPadding = 12; // Minimal internal padding
+
     const handleSend = async () => {
         if (!input.trim() || loading) return;
 
@@ -31,7 +41,6 @@ export default function AgentScreen() {
 
         try {
             const { aiService } = await import('../../src/services/AiService');
-            // Optimistic Result for demo/speed or just wait? Let's wait.
             const response = await aiService.processInput(input);
 
             if (response.type === 'ACTION') {
@@ -67,10 +76,11 @@ export default function AgentScreen() {
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 <View style={styles.content}>
-                    {/* Results / Empty State Area */}
+
+                    {/* Results Area */}
                     <ScrollView
                         style={styles.resultsContainer}
                         contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
@@ -83,12 +93,6 @@ export default function AgentScreen() {
                             </View>
                         )}
 
-                        {!loading && !result && input.trim().length === 0 && (
-                            <View style={styles.centerContainer}>
-                                {/* Empty State - No Text */}
-                            </View>
-                        )}
-
                         {!loading && result && (
                             <View style={styles.resultBox}>
                                 {result.type === 'ACTION' && result.payload && (
@@ -96,9 +100,7 @@ export default function AgentScreen() {
                                         opcode={result.opcode || 0}
                                         label={result.label || 'Action'}
                                         payload={result.payload}
-                                        onSaved={() => {
-                                            // Optional feedback
-                                        }}
+                                        onSaved={() => { }}
                                     />
                                 )}
 
@@ -112,39 +114,37 @@ export default function AgentScreen() {
                     </ScrollView>
 
                     {/* Input Area */}
-                    <View style={[styles.inputSection, { paddingBottom: insets.bottom + 100 }]}>
-                        <View style={styles.inputHeader}>
-                            {/* Optional: App Title or just space */}
-                            <View style={{ width: 48 }} />
-
-                            {/* Clear Button (only if content exists) */}
-                            {(input.length > 0 || result) && (
+                    <View style={[styles.inputSection, { paddingBottom: bottomPadding }]}>
+                        {(input.length > 0 || result) && (
+                            <View style={styles.actionsRow}>
                                 <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
                                     <Text style={styles.clearText}>Clear</Text>
                                 </TouchableOpacity>
+                            </View>
+                        )}
+
+                        <View style={styles.inputWrapper}>
+                            <TextInput
+                                ref={inputRef}
+                                style={styles.largeInput}
+                                placeholder="Message Agent..."
+                                placeholderTextColor="#94A3B8"
+                                value={input}
+                                onChangeText={setInput}
+                                multiline
+                                maxLength={500}
+                                returnKeyType="default"
+                            />
+
+                            {/* Send Button */}
+                            {input.trim().length > 0 && !loading && !result && (
+                                <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+                                    <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
+                                </TouchableOpacity>
                             )}
                         </View>
-
-                        <TextInput
-                            ref={inputRef}
-                            style={styles.largeInput}
-                            placeholder="What can I do for you?"
-                            placeholderTextColor="#CBD5E1"
-                            value={input}
-                            onChangeText={setInput}
-                            multiline
-                            maxLength={500}
-                            returnKeyType="default"
-                        // onSubmitEditing={handleSend} // multiline doesn't support onSubmitEditing easily without blur, usually enter adds newline. We'll rely on button.
-                        />
-
-                        {/* Send Button (Visible when typing) */}
-                        {input.trim().length > 0 && !loading && !result && (
-                            <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
-                                <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        )}
                     </View>
+
                 </View>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -158,52 +158,12 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        paddingHorizontal: 24,
-    },
-    inputSection: {
-        paddingTop: 10,
-        backgroundColor: '#FFFFFF', // Ensure background is opaque for keyboard transition
-    },
-    inputHeader: {
-        flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 10,
-        height: 24,
-    },
-    clearBtn: {
-        padding: 4,
-    },
-    clearText: {
-        color: '#94A3B8',
-        fontWeight: '600',
-    },
-    largeInput: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: '#0F172A',
-        lineHeight: 32,
-        textAlignVertical: 'top',
-        minHeight: 100, // Roughly 3 lines at 32px lineHeight
-        maxHeight: 200,
-    },
-    sendButton: {
-        position: 'absolute',
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#0F172A',
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
+        // Padding is now handled dynamically in style
     },
     resultsContainer: {
         flex: 1,
+        paddingHorizontal: 24,
     },
     centerContainer: {
         flex: 1,
@@ -211,12 +171,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginTop: 40,
         opacity: 0.8,
-    },
-    placeholderText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: '#94A3B8',
-        textAlign: 'center',
     },
     loadingText: {
         marginTop: 16,
@@ -238,5 +192,61 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: '#1E293B',
         lineHeight: 28,
-    }
+    },
+
+    // --- Input Styles ---
+    inputSection: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 24, // Wider padding for clean look
+        paddingTop: 16,
+        // paddingBottom: Handled inline
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9', // Subtle separator
+    },
+    actionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginBottom: 8,
+    },
+    clearBtn: {
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 4,
+    },
+    clearText: {
+        fontSize: 12,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        // Minimalist: No background, no border, no shadow
+        paddingVertical: 0,
+    },
+    largeInput: {
+        flex: 1,
+        fontSize: 24, // Large, title-like font
+        fontWeight: '600',
+        color: '#0F172A',
+        lineHeight: 34,
+        minHeight: 40,
+        maxHeight: 200,
+        textAlignVertical: 'center',
+        paddingRight: 60, // Space for button
+        paddingVertical: 0,
+        paddingLeft: 0, // Align Left
+    },
+    sendButton: {
+        position: 'absolute', // Absolute positioning to float over text if needed, or just right align
+        right: 0,
+        bottom: 4,
+        backgroundColor: '#0F172A',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 });

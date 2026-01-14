@@ -1,4 +1,5 @@
-import { View, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManager, DeviceEventEmitter, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManager, DeviceEventEmitter, Text, Keyboard } from 'react-native';
+import React, { useState, useEffect } from 'react';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,22 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     const router = useRouter();
     const currentRouteName = state.routes[state.index].name;
     const isTasks = currentRouteName === 'tasks';
+    const [visible, setVisible] = useState(true);
+
+    useEffect(() => {
+        const showEvent = Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow';
+        const hideEvent = Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide';
+
+        const keyboardDidShowListener = Keyboard.addListener(showEvent, () => setVisible(false));
+        const keyboardDidHideListener = Keyboard.addListener(hideEvent, () => setVisible(true));
+
+        return () => {
+            keyboardDidHideListener.remove();
+            keyboardDidShowListener.remove();
+        };
+    }, []);
+
+    if (!visible) return null;
 
     const onSearchPress = () => {
         const currentRouteName = state.routes[state.index].name;
@@ -126,10 +143,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
+        // Position relative to flow with content (Global Fix for overlap)
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center', // Center vertically in the bar

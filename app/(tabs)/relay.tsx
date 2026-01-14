@@ -208,7 +208,7 @@ export default function RelayScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SafeAreaView style={styles.container} edges={['top']}>
 
             {/* Sidebar */}
             <View style={styles.sidebar}>
@@ -302,12 +302,12 @@ const styles = StyleSheet.create({
     },
     sidebar: {
         width: 60,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#FFFFFF',
         borderRightWidth: 1,
         borderRightColor: '#E5E7EB',
         alignItems: 'center',
         paddingTop: 16,
-        paddingBottom: 100, // Increased to clear absolute TabBar
+        paddingBottom: 16, // Clean aesthetic padding, removed the 100px hack
     },
     sidebarBottom: {
         marginTop: 'auto',
