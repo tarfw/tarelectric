@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManager, DeviceEventEmitter } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManager, DeviceEventEmitter, Text } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,7 +60,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                     let iconName: keyof typeof Ionicons.glyphMap = 'help';
                     if (route.name === 'index') iconName = 'square-outline'; // Agent (Main)
                     if (route.name === 'tasks') iconName = 'ellipse-outline'; // Workspace
-                    if (route.name === 'relay') iconName = 'at-outline';
+                    if (route.name === 'relay') iconName = 'medical-outline';
 
                     return (
                         <TouchableOpacity
@@ -75,11 +75,15 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                             activeOpacity={0.7}
                         >
                             <View style={[styles.iconContainer, isFocused && { backgroundColor: '#F1F5F9' }]}>
-                                <Ionicons
-                                    name={iconName}
-                                    size={24}
-                                    color="#334155" // Slate 700 - Constant color
-                                />
+                                {route.name === 'relay' ? (
+                                    <Text style={{ fontSize: 54, color: '#0F172A', fontWeight: '500', includeFontPadding: false, textAlign: 'center', textAlignVertical: 'center', bottom: 2 }}>*</Text>
+                                ) : (
+                                    <Ionicons
+                                        name={iconName}
+                                        size={24}
+                                        color="#334155" // Slate 700 - Constant color
+                                    />
+                                )}
                             </View>
                         </TouchableOpacity>
                     );

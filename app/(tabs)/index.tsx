@@ -1,42 +1,11 @@
 import { router } from 'expo-router';
 import React, { useState, useRef, useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Animated, Easing, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GenUiCard } from '../../src/components/GenUiCard';
 
-// Happy Bouncing Icon Component for Empty State
-const HappyIcon = () => {
-    const translateY = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        const float = Animated.sequence([
-            Animated.timing(translateY, {
-                toValue: -15,
-                duration: 1000,
-                useNativeDriver: true,
-                easing: Easing.inOut(Easing.ease),
-            }),
-            Animated.timing(translateY, {
-                toValue: 0,
-                duration: 1000,
-                useNativeDriver: true,
-                easing: Easing.inOut(Easing.ease),
-            })
-        ]);
-
-        const loop = Animated.loop(float);
-        loop.start();
-
-        return () => loop.stop();
-    }, []);
-
-    return (
-        <Animated.View style={{ transform: [{ translateY }] }}>
-            <Ionicons name="happy-outline" size={72} color="#CBD5E1" />
-        </Animated.View>
-    );
-};
 
 type AiResult = {
     type: 'ACTION' | 'CHAT' | 'ERROR';
@@ -95,85 +64,89 @@ export default function AgentScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+            >
+                <View style={styles.content}>
+                    {/* Results / Empty State Area */}
+                    <ScrollView
+                        style={styles.resultsContainer}
+                        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {loading && (
+                            <View style={styles.centerContainer}>
+                                <ActivityIndicator size="large" color="#3B82F6" />
+                                <Text style={styles.loadingText}>Thinking...</Text>
+                            </View>
+                        )}
 
-                {/* Input Area */}
-                <View style={styles.inputSection}>
-                    <View style={styles.inputHeader}>
-                        {/* Optional: App Title or just space */}
-                        <View style={{ width: 48 }} />
+                        {!loading && !result && input.trim().length === 0 && (
+                            <View style={styles.centerContainer}>
+                                {/* Empty State - No Text */}
+                            </View>
+                        )}
 
-                        {/* Clear Button (only if content exists) */}
-                        {(input.length > 0 || result) && (
-                            <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
-                                <Text style={styles.clearText}>Clear</Text>
+                        {!loading && result && (
+                            <View style={styles.resultBox}>
+                                {result.type === 'ACTION' && result.payload && (
+                                    <GenUiCard
+                                        opcode={result.opcode || 0}
+                                        label={result.label || 'Action'}
+                                        payload={result.payload}
+                                        onSaved={() => {
+                                            // Optional feedback
+                                        }}
+                                    />
+                                )}
+
+                                {(result.type === 'CHAT' || result.type === 'ERROR') && (
+                                    <View style={styles.chatCard}>
+                                        <Text style={styles.chatText}>{result.reply}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
+
+                    {/* Input Area */}
+                    <View style={[styles.inputSection, { paddingBottom: insets.bottom + 100 }]}>
+                        <View style={styles.inputHeader}>
+                            {/* Optional: App Title or just space */}
+                            <View style={{ width: 48 }} />
+
+                            {/* Clear Button (only if content exists) */}
+                            {(input.length > 0 || result) && (
+                                <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
+                                    <Text style={styles.clearText}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <TextInput
+                            ref={inputRef}
+                            style={styles.largeInput}
+                            placeholder="What can I do for you?"
+                            placeholderTextColor="#CBD5E1"
+                            value={input}
+                            onChangeText={setInput}
+                            multiline
+                            maxLength={500}
+                            returnKeyType="default"
+                        // onSubmitEditing={handleSend} // multiline doesn't support onSubmitEditing easily without blur, usually enter adds newline. We'll rely on button.
+                        />
+
+                        {/* Send Button (Visible when typing) */}
+                        {input.trim().length > 0 && !loading && !result && (
+                            <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+                                <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
                             </TouchableOpacity>
                         )}
                     </View>
-
-                    <TextInput
-                        ref={inputRef}
-                        style={styles.largeInput}
-                        placeholder="What can I do for you?"
-                        placeholderTextColor="#CBD5E1"
-                        value={input}
-                        onChangeText={setInput}
-                        multiline
-                        maxLength={500}
-                        returnKeyType="go"
-                    // onSubmitEditing={handleSend} // multiline doesn't support onSubmitEditing easily without blur, usually enter adds newline. We'll rely on button.
-                    />
-
-                    {/* Send Button (Visible when typing) */}
-                    {input.trim().length > 0 && !loading && !result && (
-                        <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
-                            <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
-                        </TouchableOpacity>
-                    )}
                 </View>
-
-                {/* Results / Empty State Area */}
-                <ScrollView
-                    style={styles.resultsContainer}
-                    contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {loading && (
-                        <View style={styles.centerContainer}>
-                            <ActivityIndicator size="large" color="#3B82F6" />
-                            <Text style={styles.loadingText}>Thinking...</Text>
-                        </View>
-                    )}
-
-                    {!loading && !result && input.trim().length === 0 && (
-                        <View style={styles.centerContainer}>
-                            <HappyIcon />
-                            <Text style={styles.placeholderText}>Type anything to start actions or chat.</Text>
-                        </View>
-                    )}
-
-                    {!loading && result && (
-                        <View style={styles.resultBox}>
-                            {result.type === 'ACTION' && result.payload && (
-                                <GenUiCard
-                                    opcode={result.opcode || 0}
-                                    label={result.label || 'Action'}
-                                    payload={result.payload}
-                                    onSaved={() => {
-                                        // Optional feedback
-                                    }}
-                                />
-                            )}
-
-                            {(result.type === 'CHAT' || result.type === 'ERROR') && (
-                                <View style={styles.chatCard}>
-                                    <Text style={styles.chatText}>{result.reply}</Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-                </ScrollView>
-            </View>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -188,7 +161,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     inputSection: {
-        paddingTop: 20,
+        paddingTop: 10,
+        backgroundColor: '#FFFFFF', // Ensure background is opaque for keyboard transition
     },
     inputHeader: {
         flexDirection: 'row',
@@ -204,13 +178,13 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     largeInput: {
-        fontSize: 32,
-        fontWeight: '700',
+        fontSize: 24,
+        fontWeight: '600',
         color: '#0F172A',
-        lineHeight: 42,
+        lineHeight: 32,
         textAlignVertical: 'top',
-        minHeight: 120,
-        // maxHeight: 200, 
+        minHeight: 100, // Roughly 3 lines at 32px lineHeight
+        maxHeight: 200,
     },
     sendButton: {
         position: 'absolute',
@@ -229,7 +203,6 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     resultsContainer: {
-        marginTop: 20,
         flex: 1,
     },
     centerContainer: {
