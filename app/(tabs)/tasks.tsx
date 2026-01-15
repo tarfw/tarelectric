@@ -10,7 +10,10 @@ import {
   TextInput,
   ActivityIndicator,
   DeviceEventEmitter,
+  Modal,
+  Pressable,
 } from 'react-native'
+import { TaskItemCard } from '../../src/components/TaskItemCard'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { router } from 'expo-router'
@@ -19,8 +22,8 @@ import { initDatabase } from '../../src/db/init'
 import { db } from '../../src/db/client'
 import { OR } from '../../src/db/schema'
 import { electricSync } from '../../src/services/ShapeStream'
-import { vectorStore } from '../../src/services/VectorStore' // Import VectorStore
-import { embeddingService } from '../../src/services/EmbeddingService' // Import EmbeddingService
+import { vectorStore } from '../../src/services/VectorStore'
+import { embeddingService } from '../../src/services/EmbeddingService'
 import { desc, inArray } from 'drizzle-orm'
 
 // Initialize DB on start
@@ -81,29 +84,26 @@ export default function HomeScreen() {
       const searchResults = await vectorStore.search(queryVector, 10) // Top 10
       console.log(`[UI] Search returned ${searchResults.length} results`);
 
-      const ids = searchResults.map((r: any) => r.doc_id) // Note: key is doc_id not id in vector store?
+      const ids = searchResults.map((r: any) => r.doc_id)
       console.log(`[UI] Search IDs:`, ids);
 
-      const distanceMap = new Map(searchResults.map((r: any) => [r.doc_id, r.score])) // Use score as distance/similarity
+      const distanceMap = new Map(searchResults.map((r: any) => [r.doc_id, r.score]))
 
       if (ids.length === 0) {
         setItems([]) // No matches
       } else {
-        // Fetch full objects from DB for these IDs
-        // Note: Drizzle's `inArray` might need non-empty array
         const dbItems = await db.select().from(OR).where(inArray(OR.id, ids))
         console.log(`[UI] DB matched ${dbItems.length} items from OR table`);
 
-        // Attach distance AND Sort by distance (DESC) for similarity
         const sortedItems = dbItems
           .map(item => ({
             ...item,
-            distance: Number(distanceMap.get(item.id) ?? 0) // Attach score
+            distance: Number(distanceMap.get(item.id) ?? 0)
           }))
           .sort((a, b) => {
             const scoreA = a.distance;
             const scoreB = b.distance;
-            return scoreB - scoreA; // Descending: Higher score = Better match
+            return scoreB - scoreA;
           });
 
         setItems(sortedItems)
@@ -114,11 +114,6 @@ export default function HomeScreen() {
       setIsSearching(false)
     }
   }, [loadAllItems])
-
-  // Debounced Search or Manual Trigger? 
-  // For simplicity, we search on submit or with a small debounce if desired. 
-  // Let's do onChange for now with a slight natural delay effect (user stops typing)
-  // or just a submit button. Let's do onSubmitEditing for clarity.
 
   // Poll for updates ONLY if not searching
   useEffect(() => {
@@ -134,8 +129,6 @@ export default function HomeScreen() {
     }, 2000)
     return () => clearInterval(interval)
   }, [searchQuery, loadAllItems, updateStats])
-
-
 
   const [isRebuilding, setIsRebuilding] = useState(false)
 
@@ -175,14 +168,63 @@ export default function HomeScreen() {
     }
   }, [updateStats, isRebuilding])
 
+  // --- Add Operation Modal Logic ---
+  const [showOpSelector, setShowOpSelector] = useState(false)
+
+  const handleAddPress = () => {
+    setShowOpSelector(true)
+  }
+
+  const handleOpSelect = (opcode: number, label: string) => {
+    setShowOpSelector(false)
+    router.push(`/add-memory?opcode=${opcode}&label=${label}`)
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
+      {/* Operation Selector Modal */}
+      <Modal
+        visible={showOpSelector}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowOpSelector(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowOpSelector(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Create New</Text>
+
+            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(301, 'Task')}>
+              <Ionicons name="checkbox-outline" size={24} color="#4B5563" />
+              <Text style={styles.modalItemText}>Task</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(501, 'Product')}>
+              <Ionicons name="cube-outline" size={24} color="#4B5563" />
+              <Text style={styles.modalItemText}>Product</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(1, 'Note')}>
+              <Ionicons name="document-text-outline" size={24} color="#4B5563" />
+              <Text style={styles.modalItemText}>Note</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowOpSelector(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <Text style={styles.title}>Workspace</Text>
+          <TouchableOpacity onPress={handleAddPress} style={styles.headerAddBtn}>
+            <Ionicons name="add" size={24} color="#2563EB" />
+          </TouchableOpacity>
         </View>
+        {/* ... Rest of Header ... */}
         <TouchableOpacity onPress={handleRebuildIndex} disabled={isRebuilding}>
           <Text style={styles.subtitle}>
             total: {stats.total} • embedded: {stats.embedded} • {
@@ -225,51 +267,12 @@ export default function HomeScreen() {
         </View>
       ) : (
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-          {items.map((item) => {
-            let content = 'Unknown Payload'
-            try {
-              const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload
-              // DEBUG: Show full JSON as requested
-              content = JSON.stringify(parsed, null, 2)
-            } catch (e) { content = String(item.payload) }
-
-            return (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.7}
-                onPress={() => router.push(`/memory/${item.id}`)}
-              >
-                <View style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <View>
-                      <Text style={styles.streamId}>{item.streamId}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      {item.delta !== null && item.delta !== undefined && item.delta !== 0 && (
-                        <View style={[styles.badge, { backgroundColor: item.delta > 0 ? '#DCFCE7' : '#FEE2E2' }]}>
-                          <Text style={[styles.badgeText, { color: item.delta > 0 ? '#166534' : '#991B1B' }]}>
-                            {item.delta > 0 ? '+' : ''}{item.delta}
-                          </Text>
-                        </View>
-                      )}
-                      {item.distance !== undefined && (
-                        <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
-                          <Text style={[styles.badgeText, { color: '#1E40AF' }]}>
-                            dist: {Number(item.distance).toFixed(4)}
-                          </Text>
-                        </View>
-                      )}
-                      <View style={[styles.badge, { backgroundColor: item.synced ? '#D1FAE5' : '#F3F4F6' }]}>
-                        <Text style={styles.badgeText}>{item.status}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <Text style={styles.cardBody}>{content}</Text>
-                  <Text style={styles.cardFooter}>{new Date(item.ts).toLocaleString()}</Text>
-                </View>
-              </TouchableOpacity>
-            )
-          })}
+          {items.map((item, index) => (
+            <View key={item.id} style={styles.feedItem}>
+              {index > 0 && <View style={styles.divider} />}
+              <TaskItemCard item={item} />
+            </View>
+          ))}
           {items.length === 0 && (
             <Text style={styles.emptyText}>No memories found.</Text>
           )}
@@ -286,19 +289,13 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 24,
+    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  headerAddBtn: {
-    padding: 4,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
   },
   title: {
     fontSize: 24,
@@ -342,67 +339,75 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: 24,
+    paddingHorizontal: 24, // Matches header padding
     paddingBottom: 120,
+    paddingTop: 12,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+  feedItem: {
+    marginBottom: 0,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  cardId: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    color: '#9CA3AF',
-  },
-  streamId: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#6B7280',
-    marginTop: 2,
-    backgroundColor: '#F3F4F6',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 4,
-    borderRadius: 4,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 99,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#374151',
-    textTransform: 'uppercase',
-  },
-  cardBody: {
-    fontSize: 16,
-    color: '#1F2937',
-    lineHeight: 24,
-  },
-  cardFooter: {
-    marginTop: 12,
-    fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'right',
+  divider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+    width: '100%',
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 40,
     color: '#9CA3AF',
     fontSize: 16,
+  },
+
+  // --- Modal Styles ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    gap: 12,
+  },
+  modalItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  modalCancel: {
+    marginTop: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  headerAddBtn: {
+    padding: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
   },
 })

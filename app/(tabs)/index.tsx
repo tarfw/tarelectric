@@ -17,7 +17,7 @@ type AiResult = {
 export default function AgentScreen() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<AiResult | null>(null);
+    const [results, setResults] = useState<AiResult[]>([]);
     const insets = useSafeAreaInsets();
     const inputRef = useRef<TextInput>(null);
 
@@ -28,42 +28,54 @@ export default function AgentScreen() {
     const bottomPadding = 12; // Minimal internal padding
 
     const handleSend = async () => {
-        if (!input.trim() || loading) return;
+        const textToSend = input.trim();
+        if (!textToSend || loading) return;
 
+        // 1. Optimistic Update: Clear input immediately
+        const previousInput = input;
         setLoading(true);
-        setResult(null);
+        // Do NOT clear results (Stacking)
+        setInput('');
         Keyboard.dismiss();
 
         try {
             const { aiService } = await import('../../src/services/AiService');
-            const response = await aiService.processInput(input);
+            const response = await aiService.processInput(textToSend);
 
-            if (response.type === 'ACTION') {
-                setResult({
-                    type: 'ACTION',
-                    opcode: response.opcode,
-                    label: response.label,
-                    payload: response.payload
-                });
-            } else {
-                setResult({
-                    type: 'CHAT',
-                    reply: response.reply
-                });
-            }
+            const newResult: AiResult = response.type === 'ACTION' ? {
+                type: 'ACTION',
+                opcode: response.opcode,
+                label: response.label,
+                payload: response.payload
+            } : {
+                type: 'CHAT',
+                reply: response.reply
+            };
+
+            setResults(prev => [...prev, newResult]);
 
         } catch (e) {
             console.error('[AgentScreen] Error:', e);
-            setResult({ type: 'ERROR', reply: "Sorry, I had trouble processing that." });
+            // Add Error to feed
+            setResults(prev => [...prev, { type: 'ERROR', reply: "Sorry, I had trouble processing that." }]);
+
+            // Restore input for retry
+            setInput(previousInput);
         } finally {
             setLoading(false);
         }
     };
 
     const handleClear = () => {
-        setInput('');
-        setResult(null);
-        inputRef.current?.focus();
+        // "Smart" Clear:
+        if (input.length > 0) {
+            // If typing, just clear text
+            setInput('');
+            inputRef.current?.focus();
+        } else {
+            // If viewing results, clear feed (New Chat)
+            setResults([]);
+        }
     };
 
     return (
@@ -81,39 +93,48 @@ export default function AgentScreen() {
                         contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
                         keyboardShouldPersistTaps="handled"
                     >
-                        {loading && (
-                            <View style={styles.centerContainer}>
-                                <ActivityIndicator size="large" color="#3B82F6" />
-                                <Text style={styles.loadingText}>Thinking...</Text>
+                        {/* Feed Props */}
+                        {results.map((item, index) => (
+                            <View key={index} style={styles.feedItem}>
+                                {/* Divider (except first item) */}
+                                {index > 0 && <View style={styles.divider} />}
+
+                                <View style={styles.resultBox}>
+                                    {item.type === 'ACTION' && item.payload && (
+                                        <GenUiCard
+                                            opcode={item.opcode || 0}
+                                            label={item.label || 'Action'}
+                                            payload={item.payload}
+                                            onSaved={() => { }}
+                                        />
+                                    )}
+
+                                    {(item.type === 'CHAT' || item.type === 'ERROR') && (
+                                        <View style={styles.chatCard}>
+                                            <Text style={styles.chatText}>{item.reply}</Text>
+                                        </View>
+                                    )}
+                                </View>
                             </View>
-                        )}
+                        ))}
 
-                        {!loading && result && (
-                            <View style={styles.resultBox}>
-                                {result.type === 'ACTION' && result.payload && (
-                                    <GenUiCard
-                                        opcode={result.opcode || 0}
-                                        label={result.label || 'Action'}
-                                        payload={result.payload}
-                                        onSaved={() => { }}
-                                    />
-                                )}
-
-                                {(result.type === 'CHAT' || result.type === 'ERROR') && (
-                                    <View style={styles.chatCard}>
-                                        <Text style={styles.chatText}>{result.reply}</Text>
-                                    </View>
-                                )}
+                        {/* Loading Indicator (Bottom) */}
+                        {loading && (
+                            <View style={styles.loadingFooter}>
+                                <ActivityIndicator size="small" color="#3B82F6" />
                             </View>
                         )}
                     </ScrollView>
 
                     {/* Input Area */}
                     <View style={[styles.inputSection, { paddingBottom: bottomPadding }]}>
-                        {(input.length > 0 || result) && (
+                        {(input.length > 0 || results.length > 0) && (
                             <View style={styles.actionsRow}>
                                 <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
-                                    <Text style={styles.clearText}>Clear</Text>
+                                    <Text style={styles.clearText}>
+                                        {/* Context-Aware Label */}
+                                        {input.length > 0 ? "Clear" : "New Chat"}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -132,7 +153,7 @@ export default function AgentScreen() {
                             />
 
                             {/* Send Button */}
-                            {input.trim().length > 0 && !loading && !result && (
+                            {input.trim().length > 0 && !loading && (
                                 <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
                                     <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
                                 </TouchableOpacity>
@@ -160,12 +181,18 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: 24,
     },
-    centerContainer: {
-        flex: 1,
+    feedItem: {
+        marginBottom: 8,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#F1F5F9', // Light divider
+        marginVertical: 24,
+        width: '100%',
+    },
+    loadingFooter: {
+        paddingVertical: 20,
         alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 40,
-        opacity: 0.8,
     },
     loadingText: {
         marginTop: 16,
@@ -174,7 +201,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     resultBox: {
-        paddingTop: 10,
+        paddingTop: 0,
     },
     chatCard: {
         backgroundColor: '#F8FAFC',

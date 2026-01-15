@@ -32,6 +32,7 @@ const OPCODES: OpcodeItem[] = [
     { code: 305, label: 'TD Task Done' },
     { code: 401, label: 'AP Account Pay' },
     { code: 403, label: 'AR Account Refund' },
+    { code: 501, label: 'Product' },
 ]
 
 export default function SelectOpcodeScreen() {

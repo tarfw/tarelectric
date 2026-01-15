@@ -26,6 +26,7 @@ const OPCODES_MAP: Record<number, string> = {
     305: 'TD Task Done',
     401: 'AP Account Pay',
     403: 'AR Account Refund',
+    501: 'Product',
 };
 
 class AiService {
@@ -76,8 +77,8 @@ Valid OPCODES:
 301: TC Task Create
 302: TA Task Assign
 
-[Products - NEW]
-501: PC Product Create (Create new item)
+[Products]
+501: Product (Create new item)
 502: VC Variant Create (Add variant to item)
 
 Output format: JSON ONLY.
