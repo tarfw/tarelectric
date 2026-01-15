@@ -41,7 +41,6 @@ export class VectorStore {
                 'INSERT OR REPLACE INTO vector_store (doc_id, vector, content, metadata) VALUES (?, ?, ?, ?)',
                 [docId, vectorJson, content, metaJson]
             );
-            console.log(`[VectorStore] Upserted vector for doc ${docId} (length: ${vector.length})`);
 
         } catch (e) {
             console.error('Vector Store Add Error', e);

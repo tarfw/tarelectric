@@ -1,11 +1,67 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 interface TaskItemCardProps {
     item: any;
 }
 
 export function TaskItemCard({ item }: TaskItemCardProps) {
+    /* Opcode 501: Product - Custom Renderer */
+    if (item.opcode === 501) {
+        let parsed: any = {};
+        try {
+            parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;
+        } catch (e) { parsed = {} }
+
+        const title = parsed.content?.title || parsed.identifier?.brand?.name || 'Untitled Product';
+        const brand = parsed.identifier?.brand?.name || '';
+        const price = parsed.pricing?.display_price || '';
+
+        return (
+            <TouchableOpacity
+                style={styles.container}
+                onPress={() => {
+                    if (!item.id) return;
+                    router.push({
+                        pathname: '/product/editor',
+                        params: {
+                            id: item.id,
+                            initialData: typeof item.payload === 'string' ? item.payload : JSON.stringify(item.payload)
+                        }
+                    });
+                }}
+            >
+                <View style={styles.header}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ backgroundColor: '#F3E8FF', padding: 4, borderRadius: 4 }}>
+                            <Ionicons name="cube-outline" size={14} color="#9333EA" />
+                        </View>
+                        <Text style={styles.streamId}>PRODUCT</Text>
+                    </View>
+                    <Text style={styles.footer}>{new Date(item.ts).toLocaleDateString()}</Text>
+                </View>
+
+                <View style={{ marginTop: 4 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827' }}>{title}</Text>
+                    {brand ? <Text style={{ fontSize: 13, color: '#6B7280' }}>{brand}</Text> : null}
+
+                    <View style={{ flexDirection: 'row', marginTop: 6, gap: 8 }}>
+                        <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
+                            <Text style={styles.badgeText}>{parsed.identifier?.sku || 'NO SKU'}</Text>
+                        </View>
+                        {price ? (
+                            <View style={[styles.badge, { backgroundColor: '#ECFDF5' }]}>
+                                <Text style={[styles.badgeText, { color: '#059669' }]}>{price}</Text>
+                            </View>
+                        ) : null}
+                    </View>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
     let content = 'Unknown Payload';
     try {
         const parsed = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;

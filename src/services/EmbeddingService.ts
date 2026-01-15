@@ -95,7 +95,6 @@ export class EmbeddingService {
                 if (result) {
                     // Convert to JS array
                     const vector = Array.from(result) as number[];
-                    console.log(`Generated vector (dim: ${vector.length})`);
                     return vector;
                 } else {
                     console.warn('Warning: Result vector is empty/undefined', result);

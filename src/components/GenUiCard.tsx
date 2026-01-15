@@ -55,17 +55,55 @@ export function GenUiCard({ opcode, label, payload, onSaved, isInitialSaved = fa
             }
 
             // 3. Construct Clean Payload
-            const finalPayload = {
+            let finalPayload: any = {
                 ...payload,
                 qty: isStockOp ? qty : undefined,
                 amount: (isInvoiceOp || isAccountOp) ? (parseFloat(amount) || 0) : undefined,
-                name: isProductOp ? name : undefined,
-                price: isProductOp ? price : undefined,
             };
 
-            delete finalPayload.text;
-            delete finalPayload.original_text;
-            Object.keys(finalPayload).forEach(key => finalPayload[key] === undefined && delete finalPayload[key]);
+            // UCP Transformation for Product (501)
+            if (isProductOp) {
+                const ucpPayload = {
+                    ucp: {
+                        version: '2026-01-11',
+                        capability: 'dev.ucp.shopping.catalog',
+                        spec: 'https://ucp.dev/specs/shopping/catalog',
+                    },
+                    identifier: {
+                        sku: '',
+                        brand: { name: 'Generic', logo: '' },
+                    },
+                    content: {
+                        title: name || 'Untitled Product', // Map Name
+                        description: '',
+                        short_description: '',
+                    },
+                    pricing: {
+                        currency: 'USD',
+                        base_price: price || 0, // Map Price
+                        display_price: `$${price || 0}`,
+                        price_per_unit: { amount: price || 0, unit: 'item' }
+                    },
+                    availability: {
+                        status: 'in_stock',
+                        stock_level: 0,
+                        backorder_allowed: false,
+                        availability_timestamp: new Date().toISOString(),
+                    },
+                    metadata: {
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        visibility: 'draft',
+                    }
+                };
+                finalPayload = ucpPayload;
+            } else {
+                // Cleanup for non-UCP items
+                delete finalPayload.text;
+                delete finalPayload.original_text;
+                // Remove undefined keys
+                Object.keys(finalPayload).forEach(key => finalPayload[key] === undefined && delete finalPayload[key]);
+            }
 
             const newMemory = {
                 id: Crypto.randomUUID(),

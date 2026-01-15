@@ -14,7 +14,7 @@ import {
   Pressable,
 } from 'react-native'
 import { TaskItemCard } from '../../src/components/TaskItemCard'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -34,6 +34,7 @@ export default function HomeScreen() {
   const [stats, setStats] = useState({ total: 0, embedded: 0 })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
+  const insets = useSafeAreaInsets()
 
   const updateStats = useCallback(async () => {
     const s = await vectorStore.getStats()
@@ -168,61 +169,18 @@ export default function HomeScreen() {
     }
   }, [updateStats, isRebuilding])
 
-  // --- Add Operation Modal Logic ---
-  const [showOpSelector, setShowOpSelector] = useState(false)
 
-  const handleAddPress = () => {
-    setShowOpSelector(true)
-  }
-
-  const handleOpSelect = (opcode: number, label: string) => {
-    setShowOpSelector(false)
-    router.push(`/add-memory?opcode=${opcode}&label=${label}`)
-  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
 
       {/* Operation Selector Modal */}
-      <Modal
-        visible={showOpSelector}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowOpSelector(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowOpSelector(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create New</Text>
 
-            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(301, 'Task')}>
-              <Ionicons name="checkbox-outline" size={24} color="#4B5563" />
-              <Text style={styles.modalItemText}>Task</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(501, 'Product')}>
-              <Ionicons name="cube-outline" size={24} color="#4B5563" />
-              <Text style={styles.modalItemText}>Product</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalItem} onPress={() => handleOpSelect(1, 'Note')}>
-              <Ionicons name="document-text-outline" size={24} color="#4B5563" />
-              <Text style={styles.modalItemText}>Note</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowOpSelector(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
 
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <Text style={styles.title}>Workspace</Text>
-          <TouchableOpacity onPress={handleAddPress} style={styles.headerAddBtn}>
-            <Ionicons name="add" size={24} color="#2563EB" />
-          </TouchableOpacity>
         </View>
         {/* ... Rest of Header ... */}
         <TouchableOpacity onPress={handleRebuildIndex} disabled={isRebuilding}>
@@ -278,7 +236,7 @@ export default function HomeScreen() {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 

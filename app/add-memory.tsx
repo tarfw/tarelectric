@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
     View,
     Text,
@@ -34,6 +34,13 @@ export default function AddMemoryScreen() {
             if (parsed.qty) initialContent += `\nQty: ${parsed.qty}`;
         }
     } catch (e) { }
+
+    // Redirect Opcode 501 (Product) to the specialized Product UCP Editor
+    useEffect(() => {
+        if (Number(opcode) === 501) {
+            router.replace('/product/editor')
+        }
+    }, [opcode])
 
     const [content, setContent] = useState(initialContent)
     const [scope, setScope] = useState('private')
