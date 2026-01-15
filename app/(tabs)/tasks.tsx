@@ -12,6 +12,7 @@ import {
   DeviceEventEmitter,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native'
 import { TaskItemCard } from '../../src/components/TaskItemCard'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -19,15 +20,16 @@ import { StatusBar } from 'expo-status-bar'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { initDatabase } from '../../src/db/init'
-import { db } from '../../src/db/client'
+import { db, opsqlite } from '../../src/db/client'
 import { OR } from '../../src/db/schema'
 import { electricSync } from '../../src/services/ShapeStream'
+import { syncService } from '../../src/services/SyncService'
 import { vectorStore } from '../../src/services/VectorStore'
 import { embeddingService } from '../../src/services/EmbeddingService'
 import { desc, inArray } from 'drizzle-orm'
 
 // Initialize DB on start
-initDatabase()
+// initDatabase() moved to _layout.tsx
 
 export default function HomeScreen() {
   const [items, setItems] = useState<any[]>([])
@@ -170,6 +172,45 @@ export default function HomeScreen() {
   }, [updateStats, isRebuilding])
 
 
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear All Local Data?',
+      'This will delete all memories from your phone. If they exist on the server, they might re-sync.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[UI] Resetting Database...')
+
+              // 0. Iterate and Enqueue Deletes for SyncService (to clean remote)
+              const allItems = await db.select().from(OR)
+              console.log(`[UI] Syncing delete for ${allItems.length} items...`)
+              for (const item of allItems) {
+                await syncService.enqueueMutation('OR', 'DELETE', { id: item.id })
+              }
+
+              // 1. Clear Vector Store
+              await vectorStore.clear()
+              // 2. Clear OR Table
+              await opsqlite.executeAsync('DELETE FROM "OR"')
+              // 3. Reset State
+              setItems([])
+              setStats({ total: 0, embedded: 0 })
+              Alert.alert('Success', 'Databases wiped. Remote deletes queued.')
+            } catch (e) {
+              console.error('Reset Failed', e)
+              Alert.alert('Error', 'Failed to clear database.')
+            }
+          }
+        }
+      ]
+    )
+  }
+
+
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -181,6 +222,9 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <Text style={styles.title}>Workspace</Text>
+          <TouchableOpacity onPress={handleClearAll} style={styles.headerAddBtn}>
+            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+          </TouchableOpacity>
         </View>
         {/* ... Rest of Header ... */}
         <TouchableOpacity onPress={handleRebuildIndex} disabled={isRebuilding}>

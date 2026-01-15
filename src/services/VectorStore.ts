@@ -69,7 +69,6 @@ export class VectorStore {
                 `DELETE FROM vector_store WHERE doc_id IN (${placeholders})`,
                 docIds
             );
-            console.log(`[VectorStore] Batch deleted ${docIds.length} vectors`);
         } catch (e) {
             console.error('Vector Store Batch Delete Error', e);
         }
@@ -79,7 +78,6 @@ export class VectorStore {
         await this.ready;
         try {
             await this.db.executeAsync('DELETE FROM vector_store');
-            console.log('[VectorStore] Cleared all vectors');
         } catch (e) {
             console.error('Vector Store Clear Error', e);
         }
@@ -94,11 +92,8 @@ export class VectorStore {
             const rows = allDocs.rows?._array || allDocs.rows || [];
 
             if (!rows.length) {
-                console.log('[VectorStore] Search: No rows in vector_store');
                 return [];
             }
-
-            console.log(`[VectorStore] Search: Scanning ${rows.length} vectors`);
 
             const scored = rows.map((row: any) => {
                 try {
@@ -113,7 +108,6 @@ export class VectorStore {
             });
 
             const top = scored.sort((a: any, b: any) => b.score - a.score).slice(0, limit);
-            console.log(`[VectorStore] Search: Returning top ${top.length} results`);
             return top;
 
         } catch (e) {

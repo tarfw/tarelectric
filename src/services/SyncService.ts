@@ -8,10 +8,14 @@ export class SyncService {
     private isProcessing = false
 
     constructor() {
-        this.startAutoSync()
+        // Do not auto-start. Wait for DB init.
     }
 
     // Start listening to network changes
+    public start() {
+        this.startAutoSync()
+    }
+
     private startAutoSync() {
         NetInfo.addEventListener(state => {
             if (state.isConnected) {

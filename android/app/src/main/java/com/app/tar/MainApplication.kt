@@ -1,4 +1,4 @@
-package com.entice.tar
+package com.app.tar
 
 import android.app.Application
 import android.content.res.Configuration

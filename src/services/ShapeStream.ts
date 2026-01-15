@@ -23,8 +23,15 @@ export class ElectricSync {
 
         try {
             // 1. Define the stream for the 'OR' table
+            // We append a timestamp/version to force a fresh shape subscription (bypassing stale Electric cache)
+            const bust = 'v_fix_ghosts_1';
+            const url = `${BASE_URL}?table=%22OR%22&source_id=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID}&secret=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_SECRET}&handle=${bust}`;
+            console.log(`[ShapeStream] Connecting to Source ID: ${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID}`);
+            console.log(`[ShapeStream] Table: "OR"`);
+
+            // 1. Define the stream for the 'OR' table
             this.stream = new ShapeStream({
-                url: `${BASE_URL}?table=%22OR%22&source_id=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_ID}&secret=${process.env.EXPO_PUBLIC_ELECTRIC_SOURCE_SECRET}`,
+                url,
             })
 
             // 2. Consume the stream
@@ -36,6 +43,11 @@ export class ElectricSync {
                 try {
                     await db.transaction(async (tx) => {
                         for (const message of messages) {
+                            // DEBUG: Trap incoming ghost data
+                            const v = (message as any).value;
+                            if (v && v.payload) {
+                                console.log(`[ShapeStream] INCOMING FROM SERVER: ${v.id} - ${JSON.stringify(v.payload).slice(0, 30)}...`);
+                            }
                             const { headers, value } = message as any
 
                             // 1. Handle Control Messages (no value)

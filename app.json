@@ -22,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.entice.tar"
+      "package": "com.app.tar"
     },
     "web": {
       "favicon": "./assets/favicon.png"

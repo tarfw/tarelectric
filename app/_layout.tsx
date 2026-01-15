@@ -3,12 +3,23 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useEffect } from 'react'
 import { AuthProvider, useAuth } from '../src/context/AuthContext'
 import { View, ActivityIndicator } from 'react-native'
+import { initDatabase } from '../src/db/init'
+import { syncService } from '../src/services/SyncService'
 
 
 function RootLayoutNav() {
   const { session, loading } = useAuth()
   const segments = useSegments()
   const router = useRouter()
+
+  // Initialize DB and Sync Services
+  useEffect(() => {
+    async function init() {
+      await initDatabase()
+      syncService.start()
+    }
+    init()
+  }, [])
 
   useEffect(() => {
     if (loading) return
